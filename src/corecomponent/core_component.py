@@ -1,38 +1,49 @@
+from __future__ import annotations
 import logging
 import sys
 from abc import ABC
 from pathlib import Path
-import pynng
-from settings import CoreComponentSettings
+
+from corecomponent.settings import CoreComponentSettings
+from corecomponent.features.manager import Manager
 
 
-class CoreComponent(ABC):
+class CoreComponent(Manager, ABC):
     """
     Abstract base for every DetectMate component.
     """
     # hard-code component type as class variable, overwrite in subclasses
     component_type: str = "core"
 
-    def __init__(self, settings=CoreComponentSettings()):
+    def __init__(self, settings: CoreComponentSettings | None = None):
+        # Defaults first, then start Manager (opens REP socket & thread)
+        settings = settings or CoreComponentSettings()
+        Manager.__init__(self, settings=settings)
+
         self.settings = settings
         self.component_id = settings.component_id
         self.log = self._build_logger()
         self._stop_flag = False
-        #self.in_sock: pynng.Sub0 | None = None
-        #self.out_sock: pynng.Pub0 | None = None
+
         self.log.debug("%s[%s] created", self.component_type, self.component_id)
 
     # public API
     def setup_io(self) -> None:
         """
-        TODO: dial/listen for input/output sockets. call once before run()
+        Override in subclasses to open data sockets, load models, etc.
+        Called automatically by the context-manager.
         """
-        pass
+        self.log.info("setup_io() placeholder - no data sockets yet")
 
     def run(self) -> None:
-        """Main loop -> override in subclass?"""
-        self.log.info("Stop flag set for %s[%s]", self.component_type, self.component_id)
-        raise NotImplementedError
+        """
+        Placeholder main loop. Override in a subclass.
+        Stops when `stop()` sets `_stop_flag` or a 'stop' Manager command arrives.
+        """
+        self.log.info("Entering placeholder run() loop")
+        while not self._stop_flag:
+            pass  # do useful work here
+        self.log.info("Stop flag detected, exiting run() loop")
 
     def stop(self) -> None:
         """Ask component to shut down asap"""
@@ -52,8 +63,10 @@ class CoreComponent(ABC):
             sh.setFormatter(fmt)
             logger.addHandler(sh)
         if self.settings.log_to_file:
-            fh = logging.FileHandler(Path(self.settings.log_dir) /
-                                     f"{self.component_type}_{self.component_id}.log")
+            fh = logging.FileHandler(
+                Path(self.settings.log_dir) /
+                f"{self.component_type}_{self.component_id}.log"
+            )
             fh.setFormatter(fmt)
             logger.addHandler(fh)
         return logger
@@ -65,7 +78,10 @@ class CoreComponent(ABC):
 
     def __exit__(self, exc_type, exc, tb) -> bool:
         self.stop() # shut down gracefully
-        for h in list(self.log.handlers):  # close log handlers
+        self._close_manager()   # close REP socket & thread
+
+        # close log handlers
+        for h in list(self.log.handlers):
             h.close()
             self.log.removeHandler(h)
         self.log.info("Bye")

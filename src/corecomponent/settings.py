@@ -12,6 +12,9 @@ class CoreComponentSettings(BaseSettings):
     Child components inherit & extend this via Pydantic.
     """
     component_id: str = Field(default_factory=lambda: uuid4().hex)
+    # TODO: persist somehow, shouldn't change every run!
+    # cache? only for comp_id -> manually set for every component
+    # if we need more functionality for caching -> think about solutions
     component_type: str = "core"  # e.g. detector, parser, etc
 
     # logger
@@ -21,6 +24,7 @@ class CoreComponentSettings(BaseSettings):
     log_level: str = "INFO"
 
     # MQ defaults
+    # TODO: list of strings for both input and output
     mq_addr_in: str | None = "ipc:///tmp/detectmate.in.ipc"
     mq_addr_out: str | None = "ipc:///tmp/detectmate.out.ipc"
 
@@ -31,7 +35,7 @@ class CoreComponentSettings(BaseSettings):
     )
 
     @classmethod
-    def from_yaml(cls, path: str | Path | None) -> "CoreSettings":
+    def from_yaml(cls, path: str | Path | None) -> "CoreComponentSettings":
         """Utility for one-liner loading w/ override by env vars."""
         if path:
             with open(path, "r") as fh:
