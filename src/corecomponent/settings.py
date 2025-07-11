@@ -31,7 +31,7 @@ class CoreComponentSettings(BaseSettings):
     )
 
     @classmethod
-    def from_yaml(cls, path: str | Path | None) -> "CoreSettings":
+    def from_yaml(cls, path: str | Path | None) -> "CoreComponentSettings":
         """Utility for one-liner loading w/ override by env vars."""
         if path:
             with open(path, "r") as fh:
