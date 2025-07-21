@@ -1,5 +1,4 @@
-"""
-Request/Reply command-manager for DetectMate components.
+"""Request/Reply command-manager for DetectMate components.
 
 The Manager class starts a background thread with a REP socket that
 waits for simple string commands. It is meant to be inherited
@@ -65,7 +64,7 @@ class Manager:
     def _command_loop(self) -> None:
         while not self._stop_flag:
             try:
-                raw: bytes = self._rep_sock.recv() # blocks
+                raw: bytes = self._rep_sock.recv()  # blocks
                 cmd = raw.decode("utf-8", errors="ignore").strip()
             except pynng.NNGException:
                 break  # socket closed elsewhere
@@ -97,6 +96,13 @@ class Manager:
             else:
                 self._stop_flag = True
             return "stopping"
+
+        if lcmd == "pause":
+            pause_fn = getattr(self, "pause", None)
+            return pause_fn() if callable(pause_fn) else "no pause()"
+        if lcmd == "resume":
+            resume_fn = getattr(self, "resume", None)
+            return resume_fn() if callable(resume_fn) else "no resume()"
 
         return f"unknown command: {cmd}"
 

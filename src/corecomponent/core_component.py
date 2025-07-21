@@ -3,52 +3,61 @@ import logging
 import sys
 from abc import ABC
 from pathlib import Path
+import time
+import typing
 
 from corecomponent.settings import CoreComponentSettings
 from corecomponent.features.manager import Manager
+from corecomponent.features.engine import Engine
 
 
-class CoreComponent(Manager, ABC):
-    """
-    Abstract base for every DetectMate component.
-    """
+class CoreComponent(Manager, Engine, ABC):
+    """Abstract base for every DetectMate component."""
     # hard-code component type as class variable, overwrite in subclasses
     component_type: str = "core"
 
     def __init__(self, settings: CoreComponentSettings | None = None):
-        # Defaults first, then start Manager (opens REP socket & thread)
         settings = settings or CoreComponentSettings()
+
+        # Initialize Manager first (opens REP socket & thread)
         Manager.__init__(self, settings=settings)
+
+        # Then initialize Engine (opens Pub/Sub sockets & thread)
+        Engine.__init__(self, settings=settings)
 
         self.settings = settings
         self.component_id = settings.component_id
         self.log = self._build_logger()
         self._stop_flag = False
 
+        # register control commands
+        self.register_command("start", lambda _: self.start())
+        self.register_command("stop", lambda _: self.stop())
+        self.register_command("pause", lambda _: self.pause())
+        self.register_command("resume", lambda _: self.resume())
         self.log.debug("%s[%s] created", self.component_type, self.component_id)
 
     # public API
     def setup_io(self) -> None:
-        """
-        Override in subclasses to open data sockets, load models, etc.
-        Called automatically by the context-manager.
-        """
-        self.log.info("setup_io() placeholder - no data sockets yet")
+        """Hook for loading models, etc."""
+        self.log.info("setup_io: ready to process messages")
 
     def run(self) -> None:
-        """
-        Placeholder main loop. Override in a subclass.
-        Stops when `stop()` sets `_stop_flag` or a 'stop' Manager command arrives.
-        """
-        self.log.info("Entering placeholder run() loop")
-        while not self._stop_flag:
-            pass  # do useful work here
-        self.log.info("Stop flag detected, exiting run() loop")
+        """Kick off the engine, then await stop.
 
-    def stop(self) -> None:
-        """Ask component to shut down asap"""
+        The Manager's command thread is already live, so external
+        clients can pause/resume/stop at any time.
+        """
+        self.log.info(self.start())  # start engine loop
+        while not self._stop_flag:
+            time.sleep(0.5)
+        self.log.info(self.stop())  # ensure engine thread is joined
+
+    def stop(self) -> str:
+        """Stop both the engine loop and mark the component to exit."""
         self._stop_flag = True
         self.log.info("Stop flag set for %s[%s]", self.component_type, self.component_id)
+        return super().stop()  # calls Engine.stop()
 
     # helpers
     def _build_logger(self) -> logging.Logger:
@@ -76,8 +85,8 @@ class CoreComponent(Manager, ABC):
         self.setup_io()
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> bool:
-        self.stop() # shut down gracefully
+    def __exit__(self, exc_type, exc, tb) -> typing.Literal[False]:
+        self.stop()  # shut down gracefully
         self._close_manager()   # close REP socket & thread
 
         # close log handlers
