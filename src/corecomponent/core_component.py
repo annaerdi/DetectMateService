@@ -85,7 +85,7 @@ class CoreComponent(Manager, Engine, ABC):
         self.setup_io()
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> typing.Literal[False]:
+    def __exit__(self, _exc_type, _exc, _tb) -> typing.Literal[False]:
         self.stop()  # shut down gracefully
         self._close_manager()   # close REP socket & thread
 

@@ -1,11 +1,15 @@
+import time
 from corecomponent.settings import CoreComponentSettings
 from corecomponent.core_component import CoreComponent
 
 
 class SmokeComponent(CoreComponent):
     def __init__(self, settings: CoreComponentSettings | None = None):
-        # override the Manager's listen address just for this smoke test:
-        settings = settings or CoreComponentSettings(mq_addr_in="ipc:///tmp/smoke_cmd.ipc")
+        settings = settings or CoreComponentSettings(
+            manager_addr="ipc:///tmp/smoke_cmd.ipc",
+            engine_addr="ipc:///tmp/smoke_engine.ipc",
+            engine_autostart=True,
+        )
         super().__init__(settings=settings)
 
     def setup_io(self) -> None:
@@ -13,19 +17,23 @@ class SmokeComponent(CoreComponent):
         self.log.info("SmokeComponent ready to receive commands")
 
     def process(self, raw_message: bytes) -> bytes | None:
-        # Engine requires this, but we do nothing
-        return None
+        # echo back whatever we get
+        self.log.debug(f"[engine] got raw: {raw_message!r}")
+        return raw_message
 
     def _handle_cmd(self, cmd: str) -> str:
-        # print everything that comes in, then defer to Manager/CoreComponent
-        print(f"[smoke] Received command: {cmd!r}")
+        print(f"[manager] Received command: {cmd!r}")
         return super()._handle_cmd(cmd)
 
 
 if __name__ == "__main__":
     comp = SmokeComponent()
-    print("[smoke] listening on", comp.settings.mq_addr_in)
+    print(f"[smoke_test] manager listening on {comp.settings.manager_addr}")
+    print(f"[smoke_test] engine  listening on {comp.settings.engine_addr}")
     try:
         comp.run()
     except KeyboardInterrupt:
-        print("\n[smoke] KeyboardInterrupt, shutting down")
+        print("\n[smoke_test] KeyboardInterrupt, shutting down")
+        comp.stop()
+    time.sleep(0.1)
+    print("[smoke_test] done.")
