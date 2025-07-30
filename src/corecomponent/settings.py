@@ -1,8 +1,8 @@
 from pathlib import Path
-from uuid import uuid4
-from typing import Any, Dict
+from uuid import uuid5, NAMESPACE_URL
+from typing import Any, Dict, Optional
 import yaml
-from pydantic import Field, ValidationError
+from pydantic import ValidationError, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,10 +11,12 @@ class CoreComponentSettings(BaseSettings):
 
     Child components inherit & extend this via Pydantic.
     """
-    component_id: str = Field(default_factory=lambda: uuid4().hex)
-    # TODO: persist somehow, shouldn't change every run!
-    # cache? only for comp_id -> manually set for every component
-    # if we need more functionality for caching -> think about solutions
+
+    # Give each instance either a stable name or explicit id via config/env.
+    # DETECTMATE_COMPONENT_NAME=detector-1 (preferred)
+    # or DETECTMATE_COMPONENT_ID=... (explicit)
+    component_name: Optional[str] = None
+    component_id: Optional[str] = None  # computed if not provided
     component_type: str = "core"  # e.g. detector, parser, etc
 
     # logger
@@ -35,6 +37,24 @@ class CoreComponentSettings(BaseSettings):
         env_nested_delimiter="__",  # DETECTMATE_DETECTOR__THRESHOLD
         extra="forbid",
     )
+
+    @model_validator(mode="after")
+    def _ensure_component_id(self):
+        # If user provided explicitly, keep it.
+        if self.component_id:
+            return self
+
+        # 1) Prefer a stable name -> stable UUIDv5
+        if self.component_name:
+            name = f"detectmate/{self.component_type}/{self.component_name}"
+            self.component_id = uuid5(NAMESPACE_URL, name).hex
+            return self
+
+        # 2) No name: derive deterministically from addresses (also stable)
+        #    This stays the same as long as the addresses don't change.
+        base = f"{self.component_type}|{self.manager_addr or ''}|{self.engine_addr or ''}"
+        self.component_id = uuid5(NAMESPACE_URL, f"detectmate/{base}").hex
+        return self
 
     @classmethod
     def from_yaml(cls, path: str | Path | None) -> "CoreComponentSettings":
