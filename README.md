@@ -11,3 +11,9 @@ Set up the dev environment and install pre-commit hooks:
 uv pip install -e .[dev]
 pre-commit install
 ```
+
+Run the tests:
+
+```bash
+uv run pytest -q
+```
