@@ -1,11 +1,17 @@
+"""Tests that demonstrate how to build a parser+detector pipeline on top of the
+CoreComponent's Engine/Manager.
+
+- Demo 1: two detectors; anomaly-based (unknown events) and signature-based (count in window)
+- Demo 2: update Detector_2 config (limit_count) at runtime after 5 logs
+- Demo 3: training Detector_1 mid-stream to expand known events
+"""
 from __future__ import annotations
 
 import json
 import threading
 import time
 from collections import deque
-from dataclasses import asdict
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import pynng
 
@@ -86,7 +92,12 @@ class Detector2:
         return (count > self.limit_count), float(count)
 
 
-# CoreComponent-based demo class
+def _payload_to_bytes(payload: dict[str, Any]) -> bytes:
+    """Helper to JSON-encode a dict coming from pydantic models."""
+    return json.dumps(payload, default=str).encode("utf-8")
+
+
+# CoreComponent-based demo classes
 class Demo1Component(CoreComponent):
     """Demo 1: two detectors; D1 (unknown events) and D2 (windowed count)."""
 
@@ -98,28 +109,91 @@ class Demo1Component(CoreComponent):
         self.det1 = Detector1(known_events={0, 1})  # known: Server and Connection failed
         self.det2 = Detector2(limit_count=2, target_event=1, window_size=3)
 
-    def process(self, raw_message: bytes) -> bytes | None:
-        text = raw_message.decode("utf-8", "ignore").strip()
-        parsed = self.parser.parse(text)
+    def process(self, raw: bytes) -> bytes | None:
+        txt = raw.decode("utf-8", "ignore")
+        p = self.parser.parse(txt)
 
-        d1_alert, d1_score = self.det1.detect(parsed)
-        d2_alert, d2_score = self.det2.detect(parsed)
+        d1_alert, d1_score = self.det1.detect(p)
+        d2_alert, d2_score = self.det2.detect(p)
+        winner = "detector_1" if d1_alert else ("detector_2" if d2_alert else "none")
 
-        winner = (
-            "detector_1" if d1_alert
-            else "detector_2" if d2_alert
-            else "none"
+        return _payload_to_bytes(
+            {
+                "input": txt,
+                "parsed": p.model_dump(),
+                "alerts": {
+                    "detector_1": {"prediction": d1_alert, "score": d1_score},
+                    "detector_2": {"prediction": d2_alert, "score": d2_score},
+                },
+                "winner": winner,
+            }
         )
-        payload = {
-            "input": text,
-            "parsed": asdict(parsed),
-            "alerts": {
-                "detector_1": {"prediction": d1_alert, "score": d1_score},
-                "detector_2": {"prediction": d2_alert, "score": d2_score},
-            },
-            "winner": winner,
-        }
-        return json.dumps(payload).encode("utf-8")
+
+
+class Demo2Component(CoreComponent):
+    component_type = "demo2"
+
+    def __init__(self, settings: CoreComponentSettings):
+        super().__init__(settings=settings)
+        self.parser = Parser1()
+        self.det1 = Detector1({0, 1})
+        self.det2 = Detector2(limit_count=2, target_event=1, window_size=3)
+        self._idx = 0
+
+    def process(self, raw: bytes) -> bytes | None:
+        if self._idx == 5:  # update after 5 logs
+            self.det2.set_limit(10)
+        self._idx += 1
+
+        txt = raw.decode("utf-8", "ignore")
+        p = self.parser.parse(txt)
+        d1_alert, d1_score = self.det1.detect(p)
+        d2_alert, d2_score = self.det2.detect(p)
+        winner = "detector_1" if d1_alert else ("detector_2" if d2_alert else "none")
+
+        return _payload_to_bytes(
+            {
+                "input": txt,
+                "idx": self._idx - 1,
+                "detector_2_limit": self.det2.limit_count,
+                "parsed": p.model_dump(),
+                "alerts": {
+                    "detector_1": {"prediction": d1_alert, "score": d1_score},
+                    "detector_2": {"prediction": d2_alert, "score": d2_score},
+                },
+                "winner": winner,
+            }
+        )
+
+
+class Demo3Component(CoreComponent):
+    component_type = "demo3"
+
+    def __init__(self, settings: CoreComponentSettings):
+        super().__init__(settings=settings)
+        self.parser = Parser1()
+        self.det1 = Detector1(set())   # start with empty set
+        self._idx = 0
+
+    def process(self, raw: bytes) -> bytes | None:
+        if self._idx == 5:
+            self.det1.train_union({0, 1, 2})  # training mid-stream
+        self._idx += 1
+
+        txt = raw.decode("utf-8", "ignore")
+        p = self.parser.parse(txt)
+        d1_alert, d1_score = self.det1.detect(p)
+
+        return _payload_to_bytes(
+            {
+                "input": txt,
+                "idx": self._idx - 1,
+                "parsed": p.model_dump(),
+                "alerts": {"detector_1": {"prediction": d1_alert, "score": d1_score}},
+                "winner": "detector_1" if d1_alert else "none",
+                "trained_after_idx_5": self._idx > 5,
+            }
+        )
 
 
 # pytest infrastructure
@@ -184,3 +258,87 @@ def test_demo1_pipeline(tmp_path):
     comp.stop()
     time.sleep(0.1)
     assert not thread.is_alive() or comp._stop_flag
+
+
+# Demo 2 test
+def test_demo2_update_detector_config_midstream(tmp_path):
+    """Detector 2 limit updated after 5 logs -> alerts stop after update."""
+    cfg = CoreComponentSettings(
+        manager_addr=f"ipc://{tmp_path}/d2_cmd.ipc",
+        engine_addr=f"ipc://{tmp_path}/d2_eng.ipc",
+        engine_autostart=True,
+        log_level="DEBUG",
+    )
+    comp = Demo2Component(cfg)
+    thr = run_component_in_thread(comp)
+
+    logs = [
+        "INFO 2025-02-01 12:00:00 - Server started",
+        "INFO 2025-02-01 12:10:00 - Server running",
+        "ERROR 2025-02-01 12:05:00 - Connection failed",
+        "ERROR 2025-02-01 12:05:00 - Connection failed",
+        "ERROR 2025-02-01 12:05:00 - Connection failed",  # alert (limit=2)
+        "INFO 2025-02-01 12:10:00 - Server running",  # limit now 10
+        "ERROR 2025-02-01 12:05:00 - Connection failed",
+        "ERROR 2025-02-01 12:05:00 - Connection failed",
+        "ERROR 2025-02-01 12:05:00 - Connection failed",  # no alert
+    ]
+
+    winners, limits = [], []
+    with dial_pair(cfg.engine_addr) as sock:
+        for log in logs:
+            sock.send(log.encode())
+            resp = json.loads(sock.recv())
+            winners.append(resp["winner"])
+            limits.append(resp["detector_2_limit"])
+
+    assert winners == ["none", "none", "none", "none", "detector_2", "none", "none", "none", "none"]
+    assert limits[:5] == [2]*5 and limits[5:] == [10]*4
+
+    comp.stop()
+    time.sleep(0.1)
+    assert not thr.is_alive() or comp._stop_flag
+
+
+# Demo 3 test
+def test_demo3_training_midstream(tmp_path):
+    """Detector 1 starts with known_events = {} so everything alerts.
+
+    After 5 logs we train with {0,1,2}; subsequent logs should be OK.
+    """
+    cfg = CoreComponentSettings(
+        manager_addr=f"ipc://{tmp_path}/d3_cmd.ipc",
+        engine_addr=f"ipc://{tmp_path}/d3_eng.ipc",
+        engine_autostart=True,
+        log_level="DEBUG",
+    )
+    comp = Demo3Component(cfg)
+    thr = run_component_in_thread(comp)
+
+    logs = [
+        "INFO 2025-02-01 12:00:00 - Server started",  # EventID 0
+        "ERROR 2025-02-01 12:05:00 - Connection failed",  # EventID 1
+        "INFO 2025-02-01 12:10:00 - Server running",  # 0
+        "INFO 2025-02-01 12:20:00 - Server running",  # 0
+        "ERROR 2025-02-01 12:05:00 - Connection failed",  # 1
+        "INFO 2025-02-01 12:30:00 - Server running",  # training done before this
+        "INFO 2025-02-01 12:40:00 - Server running",
+        "ERROR 2025-02-01 12:05:00 - Connection failed",
+        "INFO 2025-02-01 12:30:00 - Server running",
+        "INFO 2025-02-01 12:40:00 - Server running",
+        "ERROR 2025-02-01 12:05:00 - Connection failed",
+        "ERROR 2025-02-01 12:05:00 - Connection failed",
+    ]
+
+    winners = []
+    with dial_pair(cfg.engine_addr) as sock:
+        for log in logs:
+            sock.send(log.encode())
+            winners.append(json.loads(sock.recv())["winner"])
+
+    assert winners[:5] == ["detector_1"]*5
+    assert winners[5:] == ["none"]*(len(winners)-5)
+
+    comp.stop()
+    time.sleep(0.1)
+    assert not thr.is_alive() or comp._stop_flag

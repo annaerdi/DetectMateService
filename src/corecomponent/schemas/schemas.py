@@ -1,13 +1,11 @@
-from dataclasses import dataclass, field
+from pydantic import BaseModel, Field
 from typing import List, Dict, Any
 
 
-@dataclass
-class Schema:
+class Schema(BaseModel):
     __version__: str = "1.0.0"
 
 
-@dataclass
 class LogSchema(Schema):
     logID: int = 0
     log: str = ""
@@ -15,25 +13,23 @@ class LogSchema(Schema):
     hostname: str = "example.com"
 
 
-@dataclass
 class ParserSchema(Schema):
     parserType: str = ""
     EventID: int = 0
     template: str = ""
-    variables: List[Any] = field(default_factory=list)
+    variables: List[Any] = Field(default_factory=list)
     parserID: int = 0
     logID: int = 0
     log: str = ""
-    logFormatVariables: Dict[str, Any] = field(default_factory=dict)
+    logFormatVariables: Dict[str, Any] = Field(default_factory=dict)
 
 
-@dataclass
-class DetectorSchema:
-    detectorID: int = 0
+class DetectorSchema(Schema):
+    detectorID: str = ""
     detectorType: str = ""
     alertID: int = 0
     detectionTimestamp: int = 0
-    logID: List[str] = field(default_factory=list)
+    logID: List[int] = Field(default_factory=list)
     predictionLabel: bool = False
     score: float = 0.2
-    extractedTimestamps: List[int] = field(default_factory=list)
+    extractedTimestamps: List[str] = Field(default_factory=list)
