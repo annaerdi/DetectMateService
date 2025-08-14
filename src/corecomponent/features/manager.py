@@ -14,6 +14,7 @@ TODO: implement actual commands
 """
 from __future__ import annotations
 from typing import Optional, Callable
+from pathlib import Path
 import threading
 import pynng
 
@@ -41,7 +42,6 @@ class Manager:
         listen_addr = str(self.settings.manager_addr or self._default_addr)
 
         if listen_addr.startswith("ipc://"):
-            from pathlib import Path
             Path(listen_addr.replace("ipc://", "")).unlink(missing_ok=True)
 
         self._rep_sock.listen(listen_addr)

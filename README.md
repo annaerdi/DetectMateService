@@ -17,3 +17,9 @@ Run the tests:
 ```bash
 uv run pytest -q
 ```
+
+Run the tests with coverage (add `--cov-report=html` to generate an HTML report):
+
+```bash
+uv run pytest --cov=. --cov-report=term-missing
+```
