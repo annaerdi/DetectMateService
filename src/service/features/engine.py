@@ -1,12 +1,18 @@
 import threading
 import time
+from pathlib import Path
 import pynng
 from abc import ABC, abstractmethod
 
 
 class Engine(ABC):
     """Engine drives a background thread that reads raw messages over PAIR0,
-    calls 'self.process()', and sends outputs back over the same socket."""
+    calls 'self.process()', and sends outputs back over the same socket.
+
+    Socket creation & binding are abstracted via
+    make_engine_socket(addr). Override that method in subclasses (or
+    monkeypatch it in tests) to use a custom socket implementation.
+    """
 
     def __init__(self, settings):
         self.settings = settings
@@ -18,17 +24,28 @@ class Engine(ABC):
             target=self._run_loop, name="EngineLoop", daemon=True
         )
 
-        # set up a PAIR0 socket on its own channel
-        self._pair_sock = pynng.Pair0()
+        # set up the engine socket via the abstraction
         addr = str(settings.engine_addr)
-        if addr.startswith("ipc://"):
-            from pathlib import Path
-            Path(addr.replace("ipc://", "")).unlink(missing_ok=True)
-        self._pair_sock.listen(addr)
+        self._pair_sock = self.make_engine_socket(addr)
 
         # autostart if enabled
         if getattr(settings, "engine_autostart", True):
             self.start()
+
+    # Socket abstraction
+    def make_engine_socket(self, addr: str):
+        """Create and bind the engine socket.
+
+        Default: PAIR0 listening on 'addr', with IPC file unlinked if needed.
+        Subclasses/tests may override this to return a compatible object
+        exposing .recv(), .send(), .close(), and .listen() (if applicable).
+        """
+        sock = pynng.Pair0()
+        if addr.startswith("ipc://"):
+            # Ensure stale IPC file is removed before binding
+            Path(addr.replace("ipc://", "")).unlink(missing_ok=True)
+        sock.listen(addr)
+        return sock
 
     def start(self) -> str:
         if not self._running:
