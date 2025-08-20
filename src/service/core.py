@@ -20,16 +20,17 @@ class Service(Manager, Engine, ABC):
     def __init__(self, settings: ServiceSettings | None = None):
         settings = settings or ServiceSettings()
 
-        # Initialize Manager first (opens REP socket & thread)
+        # Initialize Manager first (opens REP socket & discovers commands)
         Manager.__init__(self, settings=settings)
 
-        # Then initialize Engine (opens Pub/Sub sockets & thread)
-        Engine.__init__(self, settings=settings)
-
+        # Prepare attributes & logger BEFORE Engine autostart can call start()
         self.settings = settings
         self.component_id = settings.component_id
-        self.log = self._build_logger()
         self._stop_flag = False
+        self.log = self._build_logger()
+
+        # Initialize Engine (opens PAIR socket & may autostart -> calls self.start())
+        Engine.__init__(self, settings=settings)
 
         self.log.debug("%s[%s] created", self.component_type, self.component_id)
 
@@ -49,14 +50,14 @@ class Service(Manager, Engine, ABC):
             time.sleep(0.5)
         self.log.info(self.stop())  # ensure engine thread is joined
 
-    @manager_command()  # "start"
+    @manager_command()
     def start(self) -> str:
         """Expose engine start as a command."""
         msg = Engine.start(self)
         self.log.info(msg)
         return msg
 
-    @manager_command()  # "stop"
+    @manager_command()
     def stop(self) -> str:
         """Stop both the engine loop and mark the component to exit."""
         self._stop_flag = True
