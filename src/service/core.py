@@ -5,9 +5,10 @@ from abc import ABC
 from pathlib import Path
 import time
 import typing
+import json
 
 from service.settings import ServiceSettings
-from service.features.manager import Manager
+from service.features.manager import Manager, manager_command
 from service.features.engine import Engine
 
 
@@ -30,11 +31,6 @@ class Service(Manager, Engine, ABC):
         self.log = self._build_logger()
         self._stop_flag = False
 
-        # register control commands
-        self.register_command("start", lambda _: self.start())
-        self.register_command("stop", lambda _: self.stop())
-        self.register_command("pause", lambda _: self.pause())
-        self.register_command("resume", lambda _: self.resume())
         self.log.debug("%s[%s] created", self.component_type, self.component_id)
 
     # public API
@@ -53,22 +49,64 @@ class Service(Manager, Engine, ABC):
             time.sleep(0.5)
         self.log.info(self.stop())  # ensure engine thread is joined
 
+    @manager_command()  # "start"
+    def start(self) -> str:
+        """Expose engine start as a command."""
+        msg = Engine.start(self)
+        self.log.info(msg)
+        return msg
+
+    @manager_command()  # "stop"
     def stop(self) -> str:
         """Stop both the engine loop and mark the component to exit."""
         self._stop_flag = True
         self.log.info("Stop flag set for %s[%s]", self.component_type, self.component_id)
         return Engine.stop(self)  # calls Engine.stop()
 
-    # ensure pause/resume are logged
+    @manager_command()
     def pause(self) -> str:
         msg = Engine.pause(self)
         self.log.info(msg)
         return msg
 
+    @manager_command()
     def resume(self) -> str:
         msg = Engine.resume(self)
         self.log.info(msg)
         return msg
+
+    @manager_command()
+    def status(self) -> str:
+        """Basic status report for this component."""
+        running = getattr(self, "_running", False)
+        paused = getattr(self, "_paused", None)
+        is_paused = (paused.is_set() if paused is not None else False)
+        return f"{self.component_type}[{self.component_id}] " + (
+            ("running (paused)" if is_paused else "running") if running else "stopped"
+        )
+
+    @manager_command()
+    def reconfigure(self, cmd: str | None = None) -> str:
+        """Accepts 'reconfigure {json}' to demonstrate dynamic config updates.
+
+        This is a placeholder; TODO: adapt later to real configuration
+        """
+        payload = ""
+        if cmd:
+            _, _, tail = cmd.partition(" ")
+            payload = tail.strip()
+        if not payload:
+            return "reconfigure: no-op (no payload)"
+
+        try:
+            data = json.loads(payload)
+        except json.JSONDecodeError:
+            return "reconfigure: invalid JSON"
+
+        # Example: record the last reconfigure payload
+        setattr(self, "_last_reconfigure", data)
+        self.log.info("Reconfigured with: %s", data)
+        return "reconfigure: ok"
 
     # helpers
     def _build_logger(self) -> logging.Logger:

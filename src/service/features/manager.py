@@ -8,9 +8,8 @@ the same management interface.
 Default commands
 ----------------
 ping   -> pong
-stop   -> sets the component's stop flag and replies "stopping"
+<decorated commands> -> dynamically dispatched on self
 <else> -> "unknown command"
-TODO: implement actual commands
 """
 from __future__ import annotations
 from typing import Optional, Callable
@@ -19,6 +18,21 @@ import threading
 import pynng
 
 from service.settings import ServiceSettings
+
+
+# Decorator to mark callable commands on a component
+def manager_command(name: str | None = None):
+    """Decorator to tag methods as manager-exposed commands.
+
+    Usage:
+        @manager_command()          -> command name is the method name (lowercase)
+        @manager_command("status")  -> explicit command name
+    """
+    def _wrap(fn):
+        setattr(fn, "_manager_command", True)
+        setattr(fn, "_manager_command_name", (name or fn.__name__).lower())
+        return fn
+    return _wrap
 
 
 class Manager:
@@ -53,12 +67,31 @@ class Manager:
         )
         self._thread.start()
 
-        # custom command handlers
+        # custom command handlers (explicit registrations)
         self._handlers: dict[str, Callable[[str], str]] = {}
+
+        # discover @manager_command-decorated methods once
+        self._decorated_handlers: dict[str, Callable[..., str]] = {}
+        self._discover_decorated_commands()
 
     # public helper
     def register_command(self, name: str, handler: Callable[[str], str]) -> None:
         self._handlers[name.lower()] = handler
+
+    # discover decorated command methods on the instance/class
+    def _discover_decorated_commands(self) -> None:
+        for attr_name in dir(self):
+            if attr_name.startswith("_"):
+                continue
+            attr = getattr(self, attr_name)
+            # If it's a bound method, the function is on __func__
+            func = getattr(attr, "__func__", None)
+            if func is None:
+                continue
+            if getattr(func, "_manager_command", False):
+                cmd_name = getattr(func, "_manager_command_name", attr_name).lower()
+                # store the bound method; call directly later
+                self._decorated_handlers[cmd_name] = attr
 
     # internal machinery
     def _command_loop(self) -> None:
@@ -82,31 +115,35 @@ class Manager:
             pass
 
     def _handle_cmd(self, cmd: str) -> str:
-        lcmd = cmd.lower()
+        """Route a command string to the right handler.
 
-        if lcmd in self._handlers:
-            return self._handlers[lcmd](cmd)
+        Priority:
+          1. Explicitly registered handlers (self._handlers)
+          2. @manager_command-decorated methods on self
+          3. Built-in 'ping'
+          4. Unknown
+        """
+        # split: verb [args...]
+        verb = cmd.split(" ", 1)[0].lower()
 
-        if lcmd == "ping":
+        # 1. explicit registrations (back-compat)
+        if verb in self._handlers:
+            return self._handlers[verb](cmd)
+
+        # 2. decorator-based dynamic dispatch
+        fn = self._decorated_handlers.get(verb)
+        if fn is not None:
+            # Try to pass cmd; if the signature is zero-arg, call without
+            try:
+                return fn(cmd)
+            except TypeError:
+                return fn()
+
+        # 3. built-in ping
+        if verb == "ping":
             return "pong"
-        if lcmd == "stop":
-            # Reply immediately, stop asynchronously to avoid blocking the REP send.
-            def _do_stop():
-                stop_fn = getattr(self, "stop", None)
-                if callable(stop_fn):
-                    stop_fn()
-                else:
-                    self._stop_flag = True
-            threading.Thread(target=_do_stop, daemon=True).start()
-            return "stopping"
 
-        if lcmd == "pause":
-            pause_fn = getattr(self, "pause", None)
-            return pause_fn() if callable(pause_fn) else "no pause()"
-        if lcmd == "resume":
-            resume_fn = getattr(self, "resume", None)
-            return resume_fn() if callable(resume_fn) else "no resume()"
-
+        # 4. unknown
         return f"unknown command: {cmd}"
 
     # tear-down helper
