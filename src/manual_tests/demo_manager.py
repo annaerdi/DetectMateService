@@ -11,13 +11,18 @@ from corecomponent.core_component import CoreComponent
 
 def main() -> None:
     # Create the component; Manager starts automatically.
-    comp = CoreComponent()
+from service.core import Service
+
+
+def main() -> None:
+    # Create the component; Manager starts automatically.
+    comp = Service()
 
     # Use the context-manager sugar so log handlers close cleanly.
     with comp:
         # Simple REQ client talking to the component's REP socket
         req = pynng.Req0()
-        req.dial(comp.settings.mq_addr_in)  # same address Manager listens on
+        req.dial(comp.settings.manager_addr)  # same address Manager listens on
 
         for cmd in ("ping", "version?", "stop"):
             print(f">>> {cmd}")
