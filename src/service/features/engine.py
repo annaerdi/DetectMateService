@@ -1,20 +1,28 @@
 import threading
 import time
-from pathlib import Path
 import pynng
 from abc import ABC, abstractmethod
+from typing import Optional
+
+from service.features.engine_socket import (
+    EngineSocketFactory,
+    NngPairSocketFactory,
+)
 
 
 class Engine(ABC):
     """Engine drives a background thread that reads raw messages over PAIR0,
     calls 'self.process()', and sends outputs back over the same socket.
 
-    Socket creation & binding are abstracted via
-    make_engine_socket(addr). Override that method in subclasses (or
-    monkeypatch it in tests) to use a custom socket implementation.
+    The socket implementation is provided by an EngineSocketFactory.
+    Default: NngPairSocketFactory (pynng.Pair0).
     """
 
-    def __init__(self, settings):
+    def __init__(
+        self,
+        settings,
+        socket_factory: Optional[EngineSocketFactory] = None,
+    ):
         self.settings = settings
 
         # control flags
@@ -24,28 +32,16 @@ class Engine(ABC):
             target=self._run_loop, name="EngineLoop", daemon=True
         )
 
-        # set up the engine socket via the abstraction
+        # set up the engine socket via the factory abstraction
         addr = str(settings.engine_addr)
-        self._pair_sock = self.make_engine_socket(addr)
+        self._socket_factory: EngineSocketFactory = (
+            socket_factory if socket_factory is not None else NngPairSocketFactory()
+        )
+        self._pair_sock = self._socket_factory.create(addr)
 
         # autostart if enabled
         if getattr(settings, "engine_autostart", True):
             self.start()
-
-    # Socket abstraction
-    def make_engine_socket(self, addr: str):
-        """Create and bind the engine socket.
-
-        Default: PAIR0 listening on 'addr', with IPC file unlinked if needed.
-        Subclasses/tests may override this to return a compatible object
-        exposing .recv(), .send(), .close(), and .listen() (if applicable).
-        """
-        sock = pynng.Pair0()
-        if addr.startswith("ipc://"):
-            # Ensure stale IPC file is removed before binding
-            Path(addr.replace("ipc://", "")).unlink(missing_ok=True)
-        sock.listen(addr)
-        return sock
 
     def start(self) -> str:
         if not self._running:
