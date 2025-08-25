@@ -19,10 +19,10 @@ class Service(Manager, Engine, ABC):
 
     def __init__(self, settings: ServiceSettings = ServiceSettings()):
         # Prepare attributes & logger first
-        self.settings = settings
-        self.component_id = settings.component_id
-        self._stop_flag = False
-        self.log = self._build_logger()
+        self.settings: ServiceSettings = settings
+        self.component_id: str = settings.component_id  # type: ignore[assignment]
+        self._stop_flag: bool = False
+        self.log: logging.Logger = self._build_logger()
 
         # now init Manager (opens REP socket & discovers commands)
         Manager.__init__(self, settings=settings)
