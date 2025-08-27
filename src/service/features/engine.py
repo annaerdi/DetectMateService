@@ -95,18 +95,30 @@ class Engine(ABC):
         if logger:
             logger.exception("Engine error during %s: %s", phase, exc)
 
-    def stop(self) -> str:
+    def stop(self) -> None:
+        """Stop the engine loop and clean up resources.
+
+        Returns:
+            None on success
+        Raises:
+            RuntimeError: If stopping fails for any reason
+        """
         if not self._running:
-            return "engine not running"
+            return None
         self._running = False
         self._stop_event.set()
         # Closing the socket will raise in the recv() and let the thread exit
         try:
             self._pair_sock.close()
-        except pynng.NNGException:
-            pass
-        self._thread.join(timeout=1.0)
-        return "engine stopped"
+        except pynng.NNGException as e:
+            raise RuntimeError(f"Failed to close engine socket: {e}") from e
+        try:
+            self._thread.join(timeout=1.0)
+            if self._thread.is_alive():
+                raise RuntimeError("Engine thread failed to stop within timeout")
+        except Exception as e:
+            raise RuntimeError(f"Failed to join engine thread: {e}") from e
+        return None
 
     def pause(self) -> str:
         self._paused.set()

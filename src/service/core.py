@@ -58,8 +58,13 @@ class Service(Manager, Engine, ABC):
     def stop(self) -> str:
         """Stop both the engine loop and mark the component to exit."""
         self._stop_event.set()
-        self.log.info("Stop flag set for %s[%s]", self.component_type, self.component_id)
-        return Engine.stop(self)  # calls Engine.stop()
+        try:
+            Engine.stop(self)
+            self.log.info("Engine stopped successfully")
+            return "engine stopped"
+        except RuntimeError as e:
+            self.log.error("Failed to stop engine: %s", e)
+            return f"error: failed to stop engine - {e}"
 
     @manager_command()
     def pause(self) -> str:
