@@ -37,7 +37,6 @@ def smoke_service(tmp_path):
     yield service
 
     # Cleanup
-    service._stop_flag = True
     service.stop()
 
     # Close all sockets explicitly
@@ -61,6 +60,7 @@ def test_service_creation(smoke_service):
     assert smoke_service.component_id is not None
     assert smoke_service.settings is not None
     assert smoke_service.component_type == "smoke_test"
+    assert hasattr(smoke_service, '_stop_event')
 
 
 def test_engine_processing(smoke_service):
@@ -82,6 +82,7 @@ def test_service_stop_command(smoke_service):
         req.send(b"stop")
         response = req.recv().decode()
         assert "stopped" in response
+        assert smoke_service._stop_event.is_set()
 
 
 def test_service_id_stability():

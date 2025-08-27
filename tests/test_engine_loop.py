@@ -39,6 +39,7 @@ def comp(tmp_path):
     yield c
     c.stop()
     time.sleep(0.1)
+    assert c._stop_event.is_set()
 
 
 def test_normal_and_error_paths(comp):
@@ -64,3 +65,4 @@ def test_normal_and_error_paths(comp):
     with pynng.Req0(dial=comp.settings.manager_addr) as req:
         req.send(b"stop")
         assert req.recv() == b"engine stopped"
+        assert comp._stop_event.is_set()

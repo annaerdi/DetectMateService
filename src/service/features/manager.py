@@ -47,7 +47,7 @@ class Manager:
         settings: Optional[ServiceSettings] = None,
         **_kwargs,
     ):
-        self._stop_flag: bool = False
+        self._stop_event = threading.Event()
         self.settings: ServiceSettings = (
             settings if settings is not None else ServiceSettings()
         )
@@ -62,6 +62,9 @@ class Manager:
         self._rep_sock.listen(listen_addr)
         loggable_self = cast(Loggable, self)
         loggable_self.log.info("Manager listening on %s", listen_addr)
+
+        # set a receive timeout for the socket
+        self._rep_sock.recv_timeout = 100  # 100ms timeout
 
         # background thread
         self._thread = threading.Thread(
@@ -97,10 +100,12 @@ class Manager:
 
     # internal machinery
     def _command_loop(self) -> None:
-        while not self._stop_flag:
+        while not self._stop_event.is_set():
             try:
-                raw: bytes = self._rep_sock.recv()  # blocks
+                raw: bytes = self._rep_sock.recv()  # blocks with timeout
                 cmd = raw.decode("utf-8", errors="ignore").strip()
+            except pynng.Timeout:
+                continue  # Timeout occurred, check stop event and continue
             except pynng.NNGException:
                 break  # socket closed elsewhere
 
@@ -151,7 +156,7 @@ class Manager:
     # tear-down helper
     def _close_manager(self) -> None:
         """Called by Service.__exit__."""
-        self._stop_flag = True
+        self._stop_event.set()
         try:
             # Just close; closing from another thread unblocks .recv() in pynng.
             self._rep_sock.close()

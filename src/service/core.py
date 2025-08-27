@@ -3,7 +3,7 @@ import logging
 import sys
 from abc import ABC
 from pathlib import Path
-import time
+import threading
 import typing
 import json
 
@@ -21,7 +21,7 @@ class Service(Manager, Engine, ABC):
         # Prepare attributes & logger first
         self.settings: ServiceSettings = settings
         self.component_id: str = settings.component_id  # type: ignore[assignment]
-        self._stop_flag: bool = False
+        self._stop_event: threading.Event = threading.Event()
         self.log: logging.Logger = self._build_logger()
 
         # now init Manager (opens REP socket & discovers commands)
@@ -44,8 +44,7 @@ class Service(Manager, Engine, ABC):
         clients can pause/resume/stop at any time.
         """
         self.log.info(self.start())  # start engine loop
-        while not self._stop_flag:
-            time.sleep(0.5)
+        self._stop_event.wait()
         self.log.info(self.stop())  # ensure engine thread is joined
 
     @manager_command()
@@ -58,7 +57,7 @@ class Service(Manager, Engine, ABC):
     @manager_command()
     def stop(self) -> str:
         """Stop both the engine loop and mark the component to exit."""
-        self._stop_flag = True
+        self._stop_event.set()
         self.log.info("Stop flag set for %s[%s]", self.component_type, self.component_id)
         return Engine.stop(self)  # calls Engine.stop()
 

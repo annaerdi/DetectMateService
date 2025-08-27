@@ -36,6 +36,7 @@ def mock_service(tmp_path):
     service = MockService(settings=settings)
     yield service
     service._close_manager()
+    assert service._stop_event.is_set()
 
 
 def test_manager_commands(mock_service):

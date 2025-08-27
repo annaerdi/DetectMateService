@@ -257,7 +257,9 @@ def test_demo1_pipeline(tmp_path):
 
     comp.stop()
     time.sleep(0.1)
-    assert not thread.is_alive() or comp._stop_flag
+    # Check that stop event is set and thread is not alive
+    assert comp._stop_event.is_set()
+    assert not thread.is_alive() or comp._stop_event.is_set()
 
 
 # Demo 2 test
@@ -297,7 +299,8 @@ def test_demo2_update_detector_config_midstream(tmp_path):
 
     comp.stop()
     time.sleep(0.1)
-    assert not thr.is_alive() or comp._stop_flag
+    assert comp._stop_event.is_set()
+    assert not thr.is_alive() or comp._stop_event.is_set()
 
 
 # Demo 3 test
@@ -341,4 +344,5 @@ def test_demo3_training_midstream(tmp_path):
 
     comp.stop()
     time.sleep(0.1)
-    assert not thr.is_alive() or comp._stop_flag
+    assert comp._stop_event.is_set()
+    assert not thr.is_alive() or comp._stop_event.is_set()

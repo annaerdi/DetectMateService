@@ -24,6 +24,7 @@ class Engine(ABC):
         socket_factory: Optional[EngineSocketFactory] = None,
     ):
         self.settings = settings
+        self._stop_event = threading.Event()
 
         # control flags
         self._running = False
@@ -39,6 +40,9 @@ class Engine(ABC):
         )
         self._pair_sock = self._socket_factory.create(addr)
 
+        # Set a reasonable receive timeout
+        self._pair_sock.recv_timeout = 100  # 100ms timeout
+
         # autostart if enabled
         if getattr(settings, "engine_autostart", True):
             self.start()
@@ -51,7 +55,7 @@ class Engine(ABC):
         return "engine already running"
 
     def _run_loop(self) -> None:
-        while self._running:
+        while self._running and not self._stop_event.is_set():
             if self._paused.is_set():
                 time.sleep(0.1)
                 continue
@@ -59,9 +63,11 @@ class Engine(ABC):
             # recv phase
             try:
                 raw = self._pair_sock.recv()
+            except pynng.Timeout:
+                continue  # Timeout occurred, check running flag and continue
             except pynng.NNGException as e:
                 # Socket likely closed during shutdown; leave loop if we're stopping.
-                if not self._running:
+                if not self._running or self._stop_event.is_set():
                     break
                 self._log_engine_error("recv", e)
                 continue
@@ -93,6 +99,7 @@ class Engine(ABC):
         if not self._running:
             return "engine not running"
         self._running = False
+        self._stop_event.set()
         # Closing the socket will raise in the recv() and let the thread exit
         try:
             self._pair_sock.close()
