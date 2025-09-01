@@ -11,6 +11,17 @@ from service.settings import ServiceSettings
 from service.features.manager import Manager, manager_command
 from service.features.engine import Engine
 
+from library.processor import BaseProcessor
+
+
+class ServiceProcessorAdapter(BaseProcessor):
+    """Adapter class to use a Service's process method as a BaseProcessor."""
+    def __init__(self, service):
+        self.service = service
+
+    def process(self, raw_message: bytes) -> bytes | None:
+        return self.service.process(raw_message)
+
 
 class Service(Manager, Engine, ABC):
     """Abstract base for every DetectMate service/component."""
@@ -24,13 +35,23 @@ class Service(Manager, Engine, ABC):
         self._stop_event: threading.Event = threading.Event()
         self.log: logging.Logger = self._build_logger()
 
+        # Create processor instance
+        self.processor = self.create_processor()
+
         # now init Manager (opens REP socket & discovers commands)
         Manager.__init__(self, settings=settings)
 
-        # then init Engine (opens PAIR socket, may autostart)
-        Engine.__init__(self, settings=settings)
+        # then init Engine with the processor (opens PAIR socket, may autostart)
+        Engine.__init__(self, settings=settings, processor=self.processor)
 
         self.log.debug("%s[%s] created", self.component_type, self.component_id)
+
+    def create_processor(self) -> BaseProcessor:
+        """Create and return a processor instance for this service.
+
+        Override this method in subclasses to provide custom processors.
+        """
+        return ServiceProcessorAdapter(self)
 
     # public API
     def setup_io(self) -> None:

@@ -1,13 +1,24 @@
 import threading
 import time
 import pynng
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import Optional
 
 from service.features.engine_socket import (
     EngineSocketFactory,
     NngPairSocketFactory,
 )
+
+from library.processor import BaseProcessor
+
+
+class DefaultProcessor(BaseProcessor):
+    """A default processor that does nothing.
+
+    This is necessary to satisfy the abstract BaseProcessor requirement.
+    """
+    def process(self, raw: bytes) -> bytes | None:
+        return raw
 
 
 class Engine(ABC):
@@ -18,8 +29,14 @@ class Engine(ABC):
     Default: NngPairSocketFactory (pynng.Pair0).
     """
 
-    def __init__(self, settings, socket_factory: Optional[EngineSocketFactory] = None):
+    def __init__(
+            self,
+            settings,
+            processor: BaseProcessor = DefaultProcessor(),
+            socket_factory: Optional[EngineSocketFactory] = None
+    ):
         self.settings = settings
+        self.processor = processor
         self._stop_event = threading.Event()
 
         # control flags
@@ -70,7 +87,7 @@ class Engine(ABC):
 
             # process phase
             try:
-                out = self.process(raw)
+                out = self.processor.process(raw)
             except Exception as e:
                 # Log unexpected processing errors; don't silently swallow them.
                 self._log_engine_error("process", e)
@@ -123,9 +140,3 @@ class Engine(ABC):
     def resume(self) -> str:
         self._paused.clear()
         return "engine resumed"
-
-    @abstractmethod
-    def process(self, _raw_message: bytes) -> bytes | None:
-        """Decode raw_message, run parser(s)/detector(s), and return something
-        to publish (or None to skip)."""
-        pass
