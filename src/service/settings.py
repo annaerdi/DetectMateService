@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from uuid import uuid5, NAMESPACE_URL
 from typing import Any, Dict, Optional
@@ -33,7 +34,7 @@ class ServiceSettings(BaseSettings):
     engine_autostart: bool = True
 
     model_config = SettingsConfigDict(
-        env_prefix="DETECTMATE_",   # DETECTMATE_LOG_LEVEL etc.
+        env_prefix="DETECTMATE_",  # DETECTMATE_LOG_LEVEL etc.
         env_nested_delimiter="__",  # DETECTMATE_DETECTOR__THRESHOLD
         extra="forbid",
     )
@@ -59,11 +60,37 @@ class ServiceSettings(BaseSettings):
     @classmethod
     def from_yaml(cls, path: str | Path | None) -> "ServiceSettings":
         """Utility for one-liner loading w/ override by env vars."""
+        data: Dict[str, Any] = {}
         if path:
-            with open(path, "r") as fh:
-                data: Dict[str, Any] = yaml.safe_load(fh) or {}
-            try:
-                return cls.model_validate(data)
-            except ValidationError as e:
-                raise SystemExit(f"[config] x {e}") from e
-        return cls()
+            path = Path(path)
+            if path.exists():
+                with open(path, "r") as fh:
+                    data = yaml.safe_load(fh) or {}
+
+        # convert string paths to Path objects
+        if "log_dir" in data and isinstance(data["log_dir"], str):
+            data["log_dir"] = Path(data["log_dir"])
+
+        # check which fields have environment variable values
+        env_fields = set()
+        for field in cls.model_fields:
+            env_name = f"{cls.model_config['env_prefix']}{field.upper()}"
+            if env_name in os.environ:
+                env_fields.add(field)
+
+        # create a dictionary with final values (env vars override yaml)
+        final_data = {}
+        for field in cls.model_fields:
+            if field in env_fields:
+                # get the value from environment (let Pydantic handle parsing)
+                env_name = f"{cls.model_config['env_prefix']}{field.upper()}"
+                final_data[field] = os.environ[env_name]
+            elif field in data:
+                final_data[field] = data[field]  # use yaml value if no env var
+            else:
+                continue  # pydantic will handle default values
+
+        try:
+            return cls.model_validate(final_data)
+        except ValidationError as e:
+            raise SystemExit(f"[config] x {e}") from e
