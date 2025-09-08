@@ -46,3 +46,14 @@ with service:
             reply = req.recv().decode("utf-8", "ignore")
             print(f"<<< {reply}")
 ```
+
+#### CLI
+
+You can also run the service using the command line interface (CLI).
+It takes 2 configuration files as arguments:
+
+```bash
+detectmate start --settings service_config.yaml --params detector_params.yaml
+```
+
+Example configuration files can be found in the `tests/config` directory.
