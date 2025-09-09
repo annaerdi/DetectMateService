@@ -52,8 +52,28 @@ with service:
 You can also run the service using the command line interface (CLI).
 It takes 2 configuration files as arguments:
 
+Example configuration files can be found in the `tests/config` directory.
+
+Start the service:
+
 ```bash
-detectmate start --settings service_config.yaml --params detector_params.yaml
+detectmate start --settings tests/config/service_config.yaml --params tests/config/detector_params.yaml
 ```
 
-Example configuration files can be found in the `tests/config` directory.
+Reconfigure the service:
+
+```bash
+detectmate reconfigure --settings tests/config/service_config.yaml --params tests/config/new_params.yaml
+```
+
+Get the service status:
+
+```bash
+detectmate status --settings tests/config/service_config.yaml
+```
+
+Stop the service:
+
+```bash
+detectmate stop --settings tests/config/service_config.yaml
+```
