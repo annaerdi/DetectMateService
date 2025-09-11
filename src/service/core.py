@@ -88,7 +88,8 @@ class Service(Manager, Engine, ABC):
         if not getattr(self, '_running', False):
             self.log.info(self.start())  # start engine loop
         self._stop_event.wait()
-        self.log.info(self.stop())  # ensure engine thread is joined
+        if getattr(self, '_running', False):  # don't call stop() again if it was already called by a command
+            self.log.info(self.stop())  # ensure engine thread is joined
 
     @manager_command()
     def start(self) -> str:
@@ -100,6 +101,9 @@ class Service(Manager, Engine, ABC):
     @manager_command()
     def stop(self) -> str:
         """Stop both the engine loop and mark the component to exit."""
+        if self._stop_event.is_set():
+            return "already stopping or stopped"
+        self.log.info("Stop command received")
         self._stop_event.set()
         try:
             Engine.stop(self)
@@ -238,6 +242,7 @@ class Service(Manager, Engine, ABC):
         return self
 
     def __exit__(self, _exc_type, _exc, _tb) -> typing.Literal[False]:
-        self.stop()  # shut down gracefully
-        self._close_manager()   # close REP socket & thread
+        if not self._stop_event.is_set():  # only stop if not already stopped
+            self.stop()  # shut down gracefully
+        self._close_manager()  # close REP socket & thread
         return False  # propagate exceptions

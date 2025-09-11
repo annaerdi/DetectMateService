@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Optional, Callable
 import threading
 import pynng
+import time
 from typing import cast
 from service.features.types import Loggable
 from service.settings import ServiceSettings
@@ -94,22 +95,26 @@ class Manager:
             try:
                 raw: bytes = self._rep_sock.recv()  # blocks with timeout
                 cmd = raw.decode("utf-8", errors="ignore").strip()
+                if hasattr(self, 'log'):
+                    self.log.debug(f"Received command: {cmd}")
             except pynng.Timeout:
                 continue  # Timeout occurred, check stop event and continue
             except pynng.NNGException:
                 break  # socket closed elsewhere
 
+            # check if it's already stopping to prevent duplicate processing
+            if hasattr(self, '_stop_event') and self._stop_event.is_set() and cmd.lower() == "stop":
+                if hasattr(self, 'log'):
+                    self.log.debug("Ignoring stop command - already stopping")
+                continue
+
             reply: str = self._handle_cmd(cmd)
             try:
                 self._rep_sock.send(reply.encode())
+                if hasattr(self, 'log'):
+                    self.log.debug(f"Sent response: {reply}")
             except pynng.NNGException:
                 break
-
-        # graceful shutdown
-        try:
-            self._rep_sock.close()
-        except pynng.NNGException:
-            pass
 
     def _handle_cmd(self, cmd: str) -> str:
         """Route a command string to the right handler.
@@ -121,6 +126,10 @@ class Manager:
           4. Unknown
         """
         # split: verb [args...]
+
+        if hasattr(self, 'log'):
+            self.log.info(f"Processing command: {cmd}")
+
         verb = cmd.split(" ", 1)[0].lower()
 
         # 1. explicit registrations (back-compat)
@@ -130,11 +139,19 @@ class Manager:
         # 2. decorator-based dynamic dispatch
         fn = self._decorated_handlers.get(verb)
         if fn is not None:
-            # Try to pass cmd; if the signature is zero-arg, call without
             try:
-                return fn(cmd)
-            except TypeError:
-                return fn()
+                # Try to pass cmd; if the signature is zero-arg, call without
+                try:
+                    reply = fn(cmd)
+                except TypeError:
+                    reply = fn()
+                if hasattr(self, 'log'):
+                    self.log.debug(f"Executed command '{verb}': {reply}")
+                return reply
+            except Exception as e:
+                if hasattr(self, 'log'):
+                    self.log.error(f"Error executing command '{verb}': {e}")
+                return f"error: {e}"
 
         # 3. built-in ping
         if verb == "ping":
@@ -147,6 +164,7 @@ class Manager:
     def _close_manager(self) -> None:
         """Called by Service.__exit__."""
         self._stop_event.set()
+        time.sleep(0.05)  # give the manager thread a moment to finish any current command processing
         try:
             # Just close; closing from another thread unblocks .recv() in pynng.
             self._rep_sock.close()
