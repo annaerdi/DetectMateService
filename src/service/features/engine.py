@@ -132,11 +132,3 @@ class Engine(ABC):
         except Exception as e:
             raise RuntimeError(f"Failed to join engine thread: {e}") from e
         return None
-
-    def pause(self) -> str:
-        self._paused.set()
-        return "engine paused"
-
-    def resume(self) -> str:
-        self._paused.clear()
-        return "engine resumed"

@@ -120,23 +120,16 @@ class Manager:
         """Route a command string to the right handler.
 
         Priority:
-          1. Explicitly registered handlers (self._handlers)
-          2. @manager_command-decorated methods on self
-          3. Built-in 'ping'
-          4. Unknown
+          1. @manager_command-decorated methods on self
+          2. Built-in 'ping'
+          3. Unknown
         """
-        # split: verb [args...]
-
         if hasattr(self, 'log'):
             self.log.info(f"Processing command: {cmd}")
 
-        verb = cmd.split(" ", 1)[0].lower()
+        verb = cmd.split(" ", 1)[0].lower()  # split: verb [args...]
 
-        # 1. explicit registrations (back-compat)
-        if verb in self._handlers:
-            return self._handlers[verb](cmd)
-
-        # 2. decorator-based dynamic dispatch
+        # 1. decorator-based dynamic dispatch
         fn = self._decorated_handlers.get(verb)
         if fn is not None:
             try:
@@ -153,11 +146,11 @@ class Manager:
                     self.log.error(f"Error executing command '{verb}': {e}")
                 return f"error: {e}"
 
-        # 3. built-in ping
+        # 2. built-in ping
         if verb == "ping":
             return "pong"
 
-        # 4. unknown
+        # 3. unknown
         return f"unknown command: {cmd}"
 
     # tear-down helper

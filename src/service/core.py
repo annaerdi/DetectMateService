@@ -114,18 +114,6 @@ class Service(Manager, Engine, ABC):
             return f"error: failed to stop engine - {e}"
 
     @manager_command()
-    def pause(self) -> str:
-        msg = Engine.pause(self)
-        self.log.info(msg)
-        return msg
-
-    @manager_command()
-    def resume(self) -> str:
-        msg = Engine.resume(self)
-        self.log.info(msg)
-        return msg
-
-    @manager_command()
     def status(self, cmd: str | None = None) -> str:
         """Comprehensive status report including settings and parameters."""
         if self.param_manager:
