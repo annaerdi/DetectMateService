@@ -1,7 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
 import errno
-import socket
 from typing import Protocol, runtime_checkable
 from urllib.parse import urlparse
 
@@ -42,22 +41,8 @@ class NngRepSocketFactory:
         # Handle TCP port binding conflicts
         elif parsed.scheme == "tcp":
             try:
-                host = parsed.hostname or "127.0.0.1"
-                port = parsed.port
-                if not port:
+                if not parsed.port:
                     raise ValueError(f"Missing port in TCP address: {addr}")
-
-                # Check if port is already in use
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                try:
-                    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                    if s.connect_ex((host, port)) == 0:
-                        raise OSError(f"Port {port} is already in use")
-                finally:
-                    try:
-                        s.close()
-                    except (OSError, socket.error) as sock_err:
-                        logger.debug("Socket close error: %s", sock_err)
             except (ValueError, IndexError, OSError) as exc:
                 logger.error("Invalid TCP address or port in use: %s", exc)
                 raise

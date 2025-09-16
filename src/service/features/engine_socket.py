@@ -5,7 +5,6 @@ from typing import Protocol, runtime_checkable
 import logging
 import pynng
 import errno
-import socket
 from urllib.parse import urlparse
 
 
@@ -41,15 +40,8 @@ class NngPairSocketFactory:
                     raise
 
         elif parsed.scheme == "tcp":
-            host = parsed.hostname or "127.0.0.1"
-            port = parsed.port
-            if not port:
+            if not parsed.port:
                 raise ValueError(f"Missing port in TCP address: {addr}")
-
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                if s.connect_ex((host, port)) == 0:
-                    logger.error("Port %s is already in use", port)
-                    raise OSError(f"Port {port} is already in use")
 
         try:
             sock.listen(addr)

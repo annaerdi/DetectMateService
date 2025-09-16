@@ -2,7 +2,7 @@ import errno
 import socket
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from pynng.exceptions import NNGException
+from pynng.exceptions import NNGException, AddressInUse
 import pytest
 
 from service.core import Service
@@ -53,14 +53,12 @@ class TestManagerSocketErrorHandling:
             log_level="ERROR",
         )
 
-        # Mock the socket check to simulate port in use
-        with patch('socket.socket') as mock_socket:
-            mock_instance = MagicMock()
-            mock_socket.return_value = mock_instance
-            mock_instance.connect_ex.return_value = 0  # port is in use
+        # Mock pynng to raise AddressInUse when creating sockets
+        with patch('pynng.Rep0') as mock_rep:
+            mock_rep.return_value.listen.side_effect = AddressInUse("Address in use", errno.EADDRINUSE)
 
-            # Should raise an OSError when port is already in use
-            with pytest.raises(OSError, match="Port 9999 is already in use"):
+            # Should raise an pynng.exceptions.AddressInUse when port is already in use
+            with pytest.raises(AddressInUse, match="Address in use"):
                 MockTestService(settings=settings)
 
     def test_invalid_tcp_address(self, caplog):
