@@ -1,5 +1,4 @@
 import threading
-import time
 import pynng
 import logging
 from abc import ABC
@@ -45,7 +44,6 @@ class Engine(ABC):
 
         # control flags
         self._running = False
-        self._paused = threading.Event()
         self._thread = threading.Thread(
             target=self._run_loop, name="EngineLoop", daemon=True
         )
@@ -71,9 +69,6 @@ class Engine(ABC):
 
     def _run_loop(self) -> None:
         while self._running and not self._stop_event.is_set():
-            if self._paused.is_set():
-                time.sleep(0.1)
-                continue
 
             # recv phase
             try:

@@ -80,11 +80,7 @@ class Service(Manager, Engine, ABC):
         self.log.info("setup_io: ready to process messages")
 
     def run(self) -> None:
-        """Kick off the engine, then await stop.
-
-        The Manager's command thread is already live, so external
-        clients can pause/resume/stop at any time.
-        """
+        """Kick off the engine, then await stop."""
         if not getattr(self, '_running', False):
             self.log.info(self.start())  # start engine loop
         else:
@@ -125,8 +121,6 @@ class Service(Manager, Engine, ABC):
             print(f"DEBUG: Parameters from manager: {params}")
 
         running = getattr(self, "_running", False)
-        paused = getattr(self, "_paused", None)
-        is_paused = (paused.is_set() if paused is not None else False)
 
         # Debug logging
         self.log.debug(f"Parameter manager exists: {self.param_manager is not None}")
@@ -136,7 +130,7 @@ class Service(Manager, Engine, ABC):
             self.log.debug(f"Parameter file: {self.settings.parameter_file}")
 
         # Create status report
-        status_info = self._create_status_report(running, is_paused)
+        status_info = self._create_status_report(running)
         return json.dumps(status_info, indent=2)
 
     @manager_command()
@@ -194,7 +188,7 @@ class Service(Manager, Engine, ABC):
             logger.addHandler(fh)
         return logger
 
-    def _create_status_report(self, running: bool, is_paused: bool) -> dict:
+    def _create_status_report(self, running: bool) -> dict:
         """Create a status report dictionary with settings and parameters."""
         # Convert Path objects in settings to strings for JSON serialization
         settings_dict = self.settings.model_dump()
@@ -225,8 +219,7 @@ class Service(Manager, Engine, ABC):
             "status": {
                 "component_type": self.component_type,
                 "component_id": self.component_id,
-                "running": running,
-                "paused": is_paused
+                "running": running
             },
             "settings": settings_dict,
             "parameters": params_dict
