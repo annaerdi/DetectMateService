@@ -10,7 +10,8 @@ from service.features.engine_socket import (
     NngPairSocketFactory,
 )
 
-from library.processor import BaseProcessor
+# TODO: replace these imports with the actual library implementations
+from library.processor import BaseProcessor, ProcessorException
 
 
 class DefaultProcessor(BaseProcessor):
@@ -89,6 +90,9 @@ class Engine(ABC):
             # process phase
             try:
                 out = self.processor.process(raw)
+            except ProcessorException as e:
+                self.log.error("Processor error: %s", e)
+                continue
             except Exception as e:
                 self.log.exception("Engine error during process: %s", e)
                 continue
