@@ -39,6 +39,8 @@ def setup_logging(level=logging.INFO):
 
 def start_service(settings_path: Optional[Path] = None, params_path: Optional[Path] = None):
     """Start the service with given settings and parameters."""
+
+    # Load settings
     try:
         # if no settings path provided, use default settings
         if settings_path is None:
@@ -54,8 +56,18 @@ def start_service(settings_path: Optional[Path] = None, params_path: Optional[Pa
         logger.error(f"Error loading settings: {e}")
         sys.exit(1)
 
-    if params_path:
-        settings.parameter_file = params_path
+    # Load parameters (if provided)
+    try:
+        if params_path is not None:
+            # if parameters file provided but doesn't exist, raise error
+            if not params_path.exists():
+                logger.error(f"Parameters file not found: {params_path}")
+                sys.exit(1)
+            # if parameters file exists, set it
+            settings.parameter_file = params_path
+    except Exception as e:
+        logger.error(f"Error loading parameters file: {e}")
+        sys.exit(1)
 
     service = Service(settings=settings)
     try:
