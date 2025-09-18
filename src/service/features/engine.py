@@ -18,7 +18,7 @@ class DefaultProcessor(BaseProcessor):
 
     This is necessary to satisfy the abstract BaseProcessor requirement.
     """
-    def process(self, raw: bytes) -> bytes | None:
+    def __call__(self, raw: bytes) -> bytes | None:
         return raw
 
 
@@ -84,7 +84,7 @@ class Engine(ABC):
 
             # process phase
             try:
-                out = self.processor.process(raw)
+                out = self.processor(raw)
             except ProcessorException as e:
                 self.log.error("Processor error: %s", e)
                 continue

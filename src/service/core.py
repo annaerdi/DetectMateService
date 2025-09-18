@@ -22,7 +22,7 @@ class ServiceProcessorAdapter(BaseProcessor):
     def __init__(self, service):
         self.service = service
 
-    def process(self, raw_message: bytes) -> bytes | None:
+    def __call__(self, raw_message: bytes) -> bytes | None:
         return self.service.process(raw_message)
 
 
