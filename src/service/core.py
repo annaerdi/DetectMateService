@@ -1,7 +1,7 @@
 from __future__ import annotations
 import logging
 import sys
-from abc import ABC
+from abc import ABC, abstractmethod
 from pathlib import Path
 import threading
 import json
@@ -23,7 +23,7 @@ class ServiceProcessorAdapter(BaseProcessor):
         self.service = service
 
     def __call__(self, raw_message: bytes) -> bytes | None:
-        return self.service.processor(raw_message)
+        return self.service.process(raw_message)
 
 
 class Service(Manager, Engine, ABC):
@@ -67,6 +67,11 @@ class Service(Manager, Engine, ABC):
         Override in subclasses.
         """
         return BaseConfig
+
+    @abstractmethod
+    def process(self, raw_message: bytes) -> bytes | None:
+        """Process the raw message and return the result or None to skip."""
+        pass
 
     def create_processor(self) -> BaseProcessor:
         """Create and return a processor instance for this service.

@@ -14,7 +14,7 @@ ping   -> pong
 from __future__ import annotations
 from typing import Optional, Callable, TypeVar
 import threading
-import pynng  # type: ignore[import-untyped]
+import pynng
 import time
 import logging
 from service.settings import ServiceSettings

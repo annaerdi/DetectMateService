@@ -1,5 +1,5 @@
 import threading
-import pynng  # type: ignore[import-untyped]
+import pynng
 import logging
 from abc import ABC
 from typing import Optional

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol, runtime_checkable, cast
 import logging
-import pynng  # type: ignore[import-untyped]
+import pynng
 import errno
 from urllib.parse import urlparse
 

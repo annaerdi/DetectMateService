@@ -24,6 +24,9 @@ class MockService(Service):
     def get_config_schema(self):
         return MockConfig
 
+    def process(self, raw_message: bytes) -> bytes | None:
+        return raw_message
+
 
 @pytest.fixture
 def temp_config_file():
@@ -153,7 +156,7 @@ def test_reconfigure_command_no_config_manager():
     """Test reconfigure command when no config manager is configured."""
     settings = ServiceSettings(engine_autostart=False)  # No config file
 
-    with Service(settings=settings) as service:
+    with MockService(settings=settings) as service:
         result = service._handle_cmd('reconfigure {"threshold": 0.8}')
         assert "no config manager" in result
 

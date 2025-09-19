@@ -4,7 +4,7 @@ import errno
 from typing import Protocol, runtime_checkable, cast
 from urllib.parse import urlparse
 
-import pynng  # type: ignore[import-untyped]
+import pynng
 import logging
 
 

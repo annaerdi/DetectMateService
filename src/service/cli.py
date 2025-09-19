@@ -4,7 +4,7 @@ import logging
 import sys
 from typing import Optional
 from pathlib import Path
-import pynng  # type: ignore[import-untyped]
+import pynng
 import yaml
 
 from .settings import ServiceSettings
