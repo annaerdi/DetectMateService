@@ -37,7 +37,7 @@ def setup_logging(level=logging.INFO):
     root_logger.addHandler(stderr_handler)
 
 
-def start_service(settings_path: Optional[Path] = None, params_path: Optional[Path] = None):
+def start_service(settings_path: Optional[Path] = None, config_path: Optional[Path] = None):
     """Start the service with given settings and parameters."""
 
     # Load settings
@@ -58,15 +58,15 @@ def start_service(settings_path: Optional[Path] = None, params_path: Optional[Pa
 
     # Load parameters (if provided)
     try:
-        if params_path is not None:
+        if config_path is not None:
             # if parameters file provided but doesn't exist, raise error
-            if not params_path.exists():
-                logger.error(f"Parameters file not found: {params_path}")
+            if not config_path.exists():
+                logger.error(f"Config file not found: {config_path}")
                 sys.exit(1)
             # if parameters file exists, set it
-            settings.parameter_file = params_path
+            settings.parameter_file = config_path
     except Exception as e:
-        logger.error(f"Error loading parameters file: {e}")
+        logger.error(f"Error loading config file: {e}")
         sys.exit(1)
 
     service = Service(settings=settings)
@@ -102,7 +102,7 @@ def stop_service(settings_path: Path):
         sys.exit(1)
 
 
-def reconfigure_service(settings_path: Path, params_path: Path, persist: bool):
+def reconfigure_service(settings_path: Path, config_path: Path, persist: bool):
     """Reconfigure a running service with new parameters."""
     try:
         settings = ServiceSettings.from_yaml(settings_path)
@@ -112,13 +112,13 @@ def reconfigure_service(settings_path: Path, params_path: Path, persist: bool):
 
     # Load new parameters from YAML file
     try:
-        with open(params_path, 'r') as f:
-            params_data = yaml.safe_load(f)
+        with open(config_path, 'r') as f:
+            config_data = yaml.safe_load(f)
     except FileNotFoundError:
-        logger.error(f"Parameters file not found: {params_path}")
+        logger.error(f"Parameters file not found: {config_path}")
         sys.exit(1)
     except PermissionError:
-        logger.error(f"Permission denied reading parameters file: {params_path}")
+        logger.error(f"Permission denied reading configuration file: {config_path}")
         sys.exit(1)
     except yaml.YAMLError as e:
         logger.error(f"Invalid YAML in parameters file: {e}")
@@ -129,9 +129,9 @@ def reconfigure_service(settings_path: Path, params_path: Path, persist: bool):
 
     # Convert to JSON string for the reconfigure command
     try:
-        params_json = json.dumps(params_data)
+        config_json = json.dumps(config_data)
         if persist:
-            params_json = f"persist {params_json}"
+            config_json = f"persist {config_json}"
     except TypeError as e:
         logger.error(f"Invalid parameters format: {e}")
         sys.exit(1)
@@ -141,7 +141,7 @@ def reconfigure_service(settings_path: Path, params_path: Path, persist: bool):
 
     try:
         with pynng.Req0(dial=settings.manager_addr) as req:
-            req.send(f"reconfigure {params_json}".encode())
+            req.send(f"reconfigure {config_json}".encode())
             response = req.recv().decode()
             logger.info(f"Reconfiguration response: {response}")
     except pynng.exceptions.NNGException as e:
@@ -188,7 +188,7 @@ def main():
     # Start command
     start_parser = subparsers.add_parser("start", help="Start the service")
     start_parser.add_argument("--settings", required=False, type=Path, help="Service settings YAML file")
-    start_parser.add_argument("--params", type=Path, help="Service parameters YAML file")
+    start_parser.add_argument("--config", type=Path, help="Service parameters YAML file")
 
     # Stop command
     stop_parser = subparsers.add_parser("stop", help="Stop the service")
@@ -199,10 +199,10 @@ def main():
     status_parser.add_argument("--settings", required=True, type=Path, help="Service settings YAML file")
 
     # Reconfigure command
-    reconfigure_parser = subparsers.add_parser("reconfigure", help="Reconfigure service parameters")
+    reconfigure_parser = subparsers.add_parser("reconfigure", help="Reconfigure service configs")
     reconfigure_parser.add_argument("--settings", required=True, type=Path,
                                     help="Service settings YAML file (to get manager address)")
-    reconfigure_parser.add_argument("--params", required=True, type=Path, help="New parameters YAML file")
+    reconfigure_parser.add_argument("--config", required=True, type=Path, help="New configuration YAML file")
     reconfigure_parser.add_argument("--persist", action="store_true",
                                     help="Persist changes to parameter file")
 
@@ -210,13 +210,13 @@ def main():
 
     try:
         if args.command == "start":
-            start_service(args.settings, args.params)
+            start_service(args.settings, args.config)
         elif args.command == "stop":
             stop_service(args.settings)
         elif args.command == "status":
             get_status(args.settings)
         elif args.command == "reconfigure":
-            reconfigure_service(args.settings, args.params, args.persist)
+            reconfigure_service(args.settings, args.config, args.persist)
     except Exception as e:
         logger.error(f"Command failed: {e}")
         sys.exit(1)

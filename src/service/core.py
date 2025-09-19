@@ -8,8 +8,8 @@ import typing
 import json
 from typing import Optional, Type
 
-from service.features.parameter_manager import ParameterManager
-from service.features.parameters import BaseParameters
+from service.features.config_manager import ConfigManager
+from service.features.config import BaseConfig
 from service.settings import ServiceSettings
 from service.features.manager import Manager, manager_command
 from service.features.engine import Engine, EngineException
@@ -47,26 +47,26 @@ class Service(Manager, Engine, ABC):
         # then init Engine with the processor (opens PAIR socket, may autostart)
         Engine.__init__(self, settings=settings, processor=self.processor, logger=self.log)
 
-        self.param_manager: Optional[ParameterManager] = None
-        if hasattr(settings, 'parameter_file') and settings.parameter_file:
-            self.log.debug(f"Initializing ParameterManager with file: {settings.parameter_file}")
-            self.param_manager = ParameterManager(
-                str(settings.parameter_file),
-                self.get_parameters_schema(),
+        self.config_manager: Optional[ConfigManager] = None
+        if hasattr(settings, 'config_file') and settings.config_file:
+            self.log.debug(f"Initializing ConfigManager with file: {settings.config_file}")
+            self.config_manager = ConfigManager(
+                str(settings.config_file),
+                self.get_config_schema(),
                 logger=self.log
             )
-            # Check if parameters were loaded successfully
-            params = self.param_manager.get()
-            self.log.debug(f"Initial parameters: {params}")
+            # Check if configs were loaded successfully
+            configs = self.config_manager.get()
+            self.log.debug(f"Initial configs: {configs}")
 
         self.log.debug("%s[%s] created", self.component_type, self.component_id)
 
-    def get_parameters_schema(self) -> Type[BaseParameters]:
-        """Return the parameters schema for this service.
+    def get_config_schema(self) -> Type[BaseConfig]:
+        """Return the configuration schema for this service.
 
         Override in subclasses.
         """
-        return BaseParameters
+        return BaseConfig
 
     def create_processor(self) -> BaseProcessor:
         """Create and return a processor instance for this service.
@@ -116,19 +116,19 @@ class Service(Manager, Engine, ABC):
 
     @manager_command()
     def status(self, cmd: str | None = None) -> str:
-        """Comprehensive status report including settings and parameters."""
-        if self.param_manager:
-            params = self.param_manager.get()
-            print(f"DEBUG: Parameters from manager: {params}")
+        """Comprehensive status report including settings and configs."""
+        if self.config_manager:
+            configs = self.config_manager.get()
+            print(f"DEBUG: Configs from manager: {configs}")
 
         running = getattr(self, "_running", False)
 
         # Debug logging
-        self.log.debug(f"Parameter manager exists: {self.param_manager is not None}")
-        if self.param_manager:
-            params = self.param_manager.get()
-            self.log.debug(f"Parameters: {params}")
-            self.log.debug(f"Parameter file: {self.settings.parameter_file}")
+        self.log.debug(f"Config manager exists: {self.config_manager is not None}")
+        if self.config_manager:
+            configs = self.config_manager.get()
+            self.log.debug(f"Configurations: {configs}")
+            self.log.debug(f"Config file: {self.settings.config_file}")
 
         # Create status report
         status_info = self._create_status_report(running)
@@ -136,9 +136,9 @@ class Service(Manager, Engine, ABC):
 
     @manager_command()
     def reconfigure(self, cmd: str | None = None) -> str:
-        """Reconfigure service parameters dynamically."""
-        if not self.param_manager:
-            return "reconfigure: no parameter manager configured"
+        """Reconfigure service configurations dynamically."""
+        if not self.config_manager:
+            return "reconfigure: no config manager configured"
 
         payload = ""
         persist = False
@@ -165,9 +165,9 @@ class Service(Manager, Engine, ABC):
             return "reconfigure: invalid JSON"
 
         try:
-            self.param_manager.update(data)
+            self.config_manager.update(data)
             if persist:
-                self.param_manager.save()
+                self.config_manager.save()
             self.log.info("Reconfigured with: %s", data)
             return "reconfigure: ok"
         except Exception as e:
@@ -204,31 +204,31 @@ class Service(Manager, Engine, ABC):
         return logger
 
     def _create_status_report(self, running: bool) -> dict:
-        """Create a status report dictionary with settings and parameters."""
+        """Create a status report dictionary with settings and configs."""
         # Convert Path objects in settings to strings for JSON serialization
         settings_dict = self.settings.model_dump()
         for key, value in settings_dict.items():
             if isinstance(value, Path):
                 settings_dict[key] = str(value)
 
-        # Handle parameters
-        if self.param_manager:
-            params = self.param_manager.get()
-            if params is not None:
-                if hasattr(params, 'model_dump'):
-                    params_dict = params.model_dump()
-                    # Convert any Path objects in parameters to strings
-                    for key, value in params_dict.items():
+        # Handle configs
+        if self.config_manager:
+            configs = self.config_manager.get()
+            if configs is not None:
+                if hasattr(configs, 'model_dump'):
+                    config_dict = configs.model_dump()
+                    # Convert any Path objects in configs to strings
+                    for key, value in config_dict.items():
                         if isinstance(value, Path):
-                            params_dict[key] = str(value)
+                            config_dict[key] = str(value)
                 else:
-                    params_dict = params
+                    config_dict = configs
             else:
-                params_dict = {}
-                self.log.warning("ParameterManager.get() returned None")
+                config_dict = {}
+                self.log.warning("ConfigManager.get() returned None")
         else:
-            params_dict = {}
-            self.log.warning("No ParameterManager initialized")
+            config_dict = {}
+            self.log.warning("No ConfigManager initialized")
 
         return {
             "status": {
@@ -237,7 +237,7 @@ class Service(Manager, Engine, ABC):
                 "running": running
             },
             "settings": settings_dict,
-            "parameters": params_dict
+            "configs": config_dict
         }
 
     # context-manager sugar

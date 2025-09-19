@@ -42,7 +42,7 @@ class ServiceSettings(BaseSettings):
         extra="forbid",
     )
 
-    parameter_file: Optional[Path] = None
+    config_file: Optional[Path] = None
 
     @staticmethod
     def _generate_uuid_from_string(input_string: str) -> str:

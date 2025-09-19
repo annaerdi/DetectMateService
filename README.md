@@ -57,27 +57,27 @@ Example configuration files can be found in the `tests/config` directory.
 Start the service:
 
 ```bash
-detectmate start --settings tests/config/service_config.yaml --params tests/config/detector_params.yaml
+detectmate start --settings tests/config/service_settings.yaml --config tests/config/detector_config.yaml
 ```
 
 Reconfigure the service:
 
 ```bash
 # Update parameters in memory only
-detectmate reconfigure --settings tests/config/service_config.yaml --params tests/config/new_params.yaml
+detectmate reconfigure --settings tests/config/service_settings.yaml --config tests/config/new_config.yaml
 
-# Update parameters and persist to file. This overwrites the originally provided params file.
-detectmate reconfigure --settings tests/config/service_config.yaml --params tests/config/new_params.yaml --persist
+# Update parameters and persist to file. This overwrites the originally provided config file.
+detectmate reconfigure --settings tests/config/service_settings.yaml --config tests/config/new_config.yaml --persist
 ```
 
 Get the service status:
 
 ```bash
-detectmate status --settings tests/config/service_config.yaml
+detectmate status --settings tests/config/service_settings.yaml
 ```
 
 Stop the service:
 
 ```bash
-detectmate stop --settings tests/config/service_config.yaml
+detectmate stop --settings tests/config/service_settings.yaml
 ```
