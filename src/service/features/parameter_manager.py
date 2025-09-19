@@ -58,7 +58,6 @@ class ParameterManager:
 
     def save(self) -> None:
         """Save parameters to file."""
-        # TODO: only do this when there is a parameter in the reconfig command to persist
         with self._lock:
             if self._params is None:
                 return

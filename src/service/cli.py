@@ -102,7 +102,7 @@ def stop_service(settings_path: Path):
         sys.exit(1)
 
 
-def reconfigure_service(settings_path: Path, params_path: Path):
+def reconfigure_service(settings_path: Path, params_path: Path, persist: bool):
     """Reconfigure a running service with new parameters."""
     try:
         settings = ServiceSettings.from_yaml(settings_path)
@@ -130,6 +130,8 @@ def reconfigure_service(settings_path: Path, params_path: Path):
     # Convert to JSON string for the reconfigure command
     try:
         params_json = json.dumps(params_data)
+        if persist:
+            params_json = f"persist {params_json}"
     except TypeError as e:
         logger.error(f"Invalid parameters format: {e}")
         sys.exit(1)
@@ -201,6 +203,8 @@ def main():
     reconfigure_parser.add_argument("--settings", required=True, type=Path,
                                     help="Service settings YAML file (to get manager address)")
     reconfigure_parser.add_argument("--params", required=True, type=Path, help="New parameters YAML file")
+    reconfigure_parser.add_argument("--persist", action="store_true",
+                                    help="Persist changes to parameter file")
 
     args = parser.parse_args()
 
@@ -212,7 +216,7 @@ def main():
         elif args.command == "status":
             get_status(args.settings)
         elif args.command == "reconfigure":
-            reconfigure_service(args.settings, args.params)
+            reconfigure_service(args.settings, args.params, args.persist)
     except Exception as e:
         logger.error(f"Command failed: {e}")
         sys.exit(1)

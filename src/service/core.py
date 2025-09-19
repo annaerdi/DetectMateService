@@ -141,9 +141,21 @@ class Service(Manager, Engine, ABC):
             return "reconfigure: no parameter manager configured"
 
         payload = ""
+        persist = False
+
         if cmd:
-            _, _, tail = cmd.partition(" ")
-            payload = tail.strip()
+            # Parse the command: "reconfigure [persist] <json>"
+            parts = cmd.split(maxsplit=2)  # Split into at most 3 parts
+            if len(parts) >= 2:
+                # Check if the second part is "persist"
+                if parts[1].lower() == "persist":
+                    persist = True
+                    # Use the third part as payload if it exists
+                    payload = parts[2] if len(parts) > 2 else ""
+                else:
+                    # Use the rest of the command as payload
+                    payload = cmd.split(maxsplit=1)[1] if len(parts) > 1 else ""
+
         if not payload:
             return "reconfigure: no-op (no payload)"
 
@@ -154,6 +166,8 @@ class Service(Manager, Engine, ABC):
 
         try:
             self.param_manager.update(data)
+            if persist:
+                self.param_manager.save()
             self.log.info("Reconfigured with: %s", data)
             return "reconfigure: ok"
         except Exception as e:
