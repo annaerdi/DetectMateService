@@ -2,16 +2,29 @@ import argparse
 import json
 import logging
 import sys
-from typing import Optional
+from typing import Optional, Type
 from pathlib import Path
 import pynng
 import yaml
 
 from .settings import ServiceSettings
+from .features.config import BaseConfig
 from .core import Service
 
 
 logger = logging.getLogger(__name__)
+
+
+class CLIService(Service):
+    """Concrete implementation of Service for CLI operations."""
+
+    def process(self, raw_message: bytes) -> bytes | None:
+        """Basic implementation that just echoes the message."""
+        return raw_message
+
+    def get_config_schema(self) -> Type[BaseConfig]:
+        """Return the base config schema for CLI service."""
+        return BaseConfig
 
 
 def setup_logging(level: int = logging.INFO) -> None:
@@ -69,7 +82,7 @@ def start_service(settings_path: Optional[Path] = None, config_path: Optional[Pa
         logger.error(f"Error loading config file: {e}")
         sys.exit(1)
 
-    service = Service(settings=settings)
+    service = CLIService(settings=settings)
     try:
         with service:
             service.run()
