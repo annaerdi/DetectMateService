@@ -3,7 +3,7 @@ name = "service-prototype"
 version = "0.1.0"
 description = "Prototype for the core service of DetectMate"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 
 dependencies = [
     "pathlib>=1.0.1",
@@ -21,6 +21,9 @@ dev = [
     "prek>=0.2.8",
     "pytest>=8.4.1",
     "pytest-cov>=6.2.1",
+    "detectmatelibrary @ git+https://github.com/ait-detectmate/DetectMateLibrary.git@dev_ipmach"
+    # TODO: change branch
+    # TODO: should this stay a dev dependency? or move to main dependencies?
 ]
 
 [project.scripts]

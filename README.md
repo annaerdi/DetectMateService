@@ -2,9 +2,55 @@
 
 This project demonstrates a basic `Service` class designed to be inherited by other specialized components.
 
-### Developer setup:
+## Developer setup:
 
-Set up the dev environment and install pre-commit hooks (using [prek](https://github.com/j178/prek)):
+DetectMateLibrary is a dependency of the Service. As it currently resides in a private GitHub repo,
+ensure you have access to it and follow these steps, so that it can be installed in the virtual environment.
+
+### Step 1: Generate a GitHub Personal Access Token
+
+1. **Go to GitHub Settings:**
+   - Visit [https://github.com/settings/tokens](https://github.com/settings/tokens)
+
+2. **Create New Token:**
+   - Click **Developer settings** in left sidebar
+   - Click **Personal access tokens** → **Tokens (classic)**
+   - Click **Generate new token** → **Generate new token (classic)**
+
+3. **Configure Token:**
+   - **Note:** Something like "Private Repo Access"
+   - **Expiration:** Set an appropriate expiration date
+   - **Scopes:** Select at least:
+     - `repo` (full control of private repositories)
+     - `read:packages` (if the repo publishes packages)
+
+4. **Generate and Copy**
+
+
+### Step 2: Configure Git to Use the Token
+
+You have two options:
+
+#### Option A: Configure Git globally (faster)
+```bash
+git config --global url."https://{username}:{token}@github.com".insteadOf "https://github.com"
+```
+
+Replace `{username}` with your GitHub username and `{token}` with your actual token.
+
+#### Option B: Use environment variable (more secure)
+```bash
+export GITHUB_TOKEN="your_actual_token_here"
+```
+
+Then configure Git to use it:
+```bash
+git config --global url."https://${GITHUB_TOKEN}:x-oauth-basic@github.com".insteadOf "https://github.com"
+```
+
+
+
+### Step 3: Set up the dev environment and install pre-commit hooks (using [prek](https://github.com/j178/prek))
 
 ```bash
 uv pip install -e .[dev]
