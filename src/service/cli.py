@@ -51,9 +51,9 @@ def setup_logging(level: int = logging.INFO) -> None:
 
 
 def start_service(settings_path: Optional[Path] = None, config_path: Optional[Path] = None) -> None:
-    """Start the service with given settings and parameters."""
+    """Start the service with given settings and component configuration."""
 
-    # Load settings
+    # Load service settings
     try:
         # if no settings path provided, use default settings
         if settings_path is None:
@@ -201,7 +201,7 @@ def main() -> None:
     # Start command
     start_parser = subparsers.add_parser("start", help="Start the service")
     start_parser.add_argument("--settings", required=False, type=Path, help="Service settings YAML file")
-    start_parser.add_argument("--config", type=Path, help="Service parameters YAML file")
+    start_parser.add_argument("--config", type=Path, help="Component configuration YAML file")
 
     # Stop command
     stop_parser = subparsers.add_parser("stop", help="Stop the service")

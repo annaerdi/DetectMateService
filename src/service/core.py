@@ -1,7 +1,7 @@
 from __future__ import annotations
 import logging
 import sys
-from abc import ABC, abstractmethod
+from abc import ABC
 from pathlib import Path
 import threading
 import json
@@ -13,8 +13,10 @@ from service.features.config import BaseConfig
 from service.settings import ServiceSettings
 from service.features.manager import Manager, manager_command
 from service.features.engine import Engine, EngineException
+from service.features.component_loader import ComponentLoader
 
 from library.processor import BaseProcessor
+from detectmatelibrary.common.core import CoreComponent
 
 
 class ServiceProcessorAdapter(BaseProcessor):
@@ -26,17 +28,54 @@ class ServiceProcessorAdapter(BaseProcessor):
         return self.service.process(raw_message)
 
 
+class LibraryComponentProcessor(BaseProcessor):
+    """Adapter to use DetectMate library components as BaseProcessor."""
+
+    def __init__(self, component: CoreComponent) -> None:
+        self.component = component
+
+    def __call__(self, raw_message: bytes) -> bytes | None | Any:
+        """Process message using the library component."""
+        try:
+            result = self.component.process(raw_message)
+            return result
+        except Exception as e:
+            logging.getLogger(__name__).error(f"Component processing error: {e}")
+            return None
+
+
 class Service(Manager, Engine, ABC):
     """Abstract base for every DetectMate service/component."""
     # hard-code component type as class variable, overwrite in subclasses
     component_type: str = "core"
 
-    def __init__(self, settings: ServiceSettings = ServiceSettings()):
+    def __init__(
+            self,
+            settings: ServiceSettings = ServiceSettings(),
+            component_config: Dict[str, Any] | None = None
+    ):
         # Prepare attributes & logger first
         self.settings: ServiceSettings = settings
         self.component_id: str = settings.component_id  # type: ignore[assignment]
         self._stop_event: threading.Event = threading.Event()
         self.log: logging.Logger = self._build_logger()
+
+        # Load library component if component_type is specified
+        self.library_component: Optional[CoreComponent] = None
+        if (hasattr(settings, 'component_type') and
+                settings.component_type != "core" and
+                not settings.component_type.startswith("core")):
+
+            try:
+                self.log.info(f"Loading library component: {settings.component_type}")
+                self.library_component = ComponentLoader.load_component(
+                    settings.component_type,
+                    component_config or {}
+                )
+                self.log.info(f"Successfully loaded component: {self.library_component}")
+            except Exception as e:
+                self.log.error(f"Failed to load component {settings.component_type}: {e}")
+                raise
 
         # Create processor instance
         self.processor = self.create_processor()
@@ -62,23 +101,27 @@ class Service(Manager, Engine, ABC):
         self.log.debug("%s[%s] created", self.component_type, self.component_id)
 
     def get_config_schema(self) -> Type[BaseConfig]:
-        """Return the configuration schema for this service.
-
-        Override in subclasses.
-        """
+        """Return the configuration schema for this service."""
         return BaseConfig
 
-    @abstractmethod
-    def process(self, raw_message: bytes) -> bytes | None:
-        """Process the raw message and return the result or None to skip."""
-        pass
+    def process(self, raw_message: bytes) -> bytes | None | Any:
+        """Process the raw message using the library component or default
+        implementation."""
+        if self.library_component:
+            # use the library component's process method
+            return self.library_component.process(raw_message)
+        else:
+            # default implementation for core service
+            return raw_message
 
     def create_processor(self) -> BaseProcessor:
-        """Create and return a processor instance for this service.
-
-        Override this method in subclasses to provide custom processors.
-        """
-        return ServiceProcessorAdapter(self)
+        """Create processor based on available components."""
+        if self.library_component:
+            return LibraryComponentProcessor(self.library_component)
+        else:
+            # fall back to service's own process method
+            # TODO: do we need this?
+            return ServiceProcessorAdapter(self)
 
     # public API
     def setup_io(self) -> None:
