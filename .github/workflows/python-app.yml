@@ -26,6 +26,9 @@ jobs:
         activate-environment: true
         enable-cache: true
 
+    - name: Configure git to use GITHUB_TOKEN for private dependencies
+      run: git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+
     - name: Install project deps
       run: uv pip install -e ".[dev]"
 
