@@ -68,6 +68,27 @@ class Service(Manager, Engine, ABC):
         # Now build the logger (which uses component_type)
         self.log: logging.Logger = self._build_logger()
 
+        # Initialize config manager before loading the library component
+        # so we can pass the loaded configs to the component
+        self.config_manager: Optional[ConfigManager] = None
+        loaded_config_dict: Dict[str, Any] = {}
+
+        if hasattr(settings, 'config_file') and settings.config_file:
+            self.log.debug(f"Initializing ConfigManager with file: {settings.config_file}")
+            self.config_manager = ConfigManager(
+                str(settings.config_file),
+                self.get_config_schema(),
+                logger=self.log
+            )
+            # Get the loaded configs to pass to library component
+            configs = self.config_manager.get()
+            self.log.debug(f"Initial configs: {configs}")
+            if configs is not None:
+                if hasattr(configs, 'model_dump'):
+                    loaded_config_dict = configs.model_dump()
+                elif isinstance(configs, dict):
+                    loaded_config_dict = configs
+
         # Load library component if component_type is specified and not core
         self.library_component: Optional[CoreComponent] = None
         if (hasattr(settings, 'component_type') and
@@ -76,9 +97,11 @@ class Service(Manager, Engine, ABC):
 
             try:
                 self.log.info(f"Loading library component: {settings.component_type}")
+                # use loaded configs from config_manager, fall back to component_config
+                config_to_use = loaded_config_dict or component_config or {}
                 self.library_component = ComponentLoader.load_component(
                     settings.component_type,
-                    component_config or {}
+                    config_to_use
                 )
                 self.log.info(f"Successfully loaded component: {self.library_component}")
             except Exception as e:
@@ -93,18 +116,6 @@ class Service(Manager, Engine, ABC):
 
         # then init Engine with the processor (opens PAIR socket, may autostart)
         Engine.__init__(self, settings=settings, processor=self.processor, logger=self.log)
-
-        self.config_manager: Optional[ConfigManager] = None
-        if hasattr(settings, 'config_file') and settings.config_file:
-            self.log.debug(f"Initializing ConfigManager with file: {settings.config_file}")
-            self.config_manager = ConfigManager(
-                str(settings.config_file),
-                self.get_config_schema(),
-                logger=self.log
-            )
-            # Check if configs were loaded successfully
-            configs = self.config_manager.get()
-            self.log.debug(f"Initial configs: {configs}")
 
         self.log.debug("%s[%s] created", self.component_type, self.component_id)
 
