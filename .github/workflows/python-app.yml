@@ -36,6 +36,7 @@ jobs:
         git config --global url."https://${ANNA_GITHUB_TOKEN}:x-oauth-basic@github.com".insteadOf "https://github.com"
 
         # Set up uv
+        uv python install 3.12
         uv venv
         source .venv/bin/activate
         uv pip install -e ".[dev]"
