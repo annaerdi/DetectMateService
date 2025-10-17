@@ -33,6 +33,7 @@ def running_service(tmp_path: Path, test_log_file: Path) -> Generator[dict, None
     # Create settings and config
     settings = {
         "component_type": "readers.log_file.LogFileReader",
+        "component_config_class": "readers.log_file.LogFileConfig",
         "component_name": "test-reader",
         "manager_addr": f"ipc:///tmp/test_reader_cmd_{timestamp}.ipc",
         "engine_addr": f"ipc:///tmp/test_reader_engine_{timestamp}.ipc",
