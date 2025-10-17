@@ -28,13 +28,17 @@ jobs:
         activate-environment: true
         enable-cache: true
 
-    - name: Configure git credentials
+    - name: Prepare environment and install deps
       env:
-        MY_TOKEN: ${{ secrets.ANNA_GITHUB_TOKEN }}
-      run: git config --global url."https://${ANNA_GITHUB_TOKEN}:x-oauth-basic@github.com".insteadOf "https://github.com"
+        ANNA_GITHUB_TOKEN: ${{ secrets.ANNA_GITHUB_TOKEN }}
+      run: |
+        # Configure git to authenticate private repos using GITHUB_TOKEN
+        git config --global url."https://${ANNA_GITHUB_TOKEN}:x-oauth-basic@github.com".insteadOf "https://github.com"
 
-    - name: Install project deps
-      run: uv pip install -e ".[dev]" --verbose
+        # Set up uv
+        uv venv
+        source .venv/bin/activate
+        uv pip install -e ".[dev]"
 
     - name: Run pre-commit with prek
       run: uv run prek run -a
