@@ -8,21 +8,13 @@ import pynng
 import yaml
 
 from .settings import ServiceSettings
-# from .features.config import BaseConfig
 from .core import Service
-
-from detectmatelibrary.readers.log_file import LogFileConfig
 
 logger = logging.getLogger(__name__)
 
 
 class CLIService(Service):
-    """Concrete implementation of Service for CLI operations."""
-
-    def get_config_schema(self) -> LogFileConfig:
-        """Return the base config schema for CLI service."""
-        # TODO: make this dynamic based on actual service !!!
-        return LogFileConfig
+    pass
 
 
 def setup_logging(level: int = logging.INFO) -> None:

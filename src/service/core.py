@@ -5,18 +5,18 @@ from abc import ABC
 from pathlib import Path
 import threading
 import json
-from typing import Optional, Type, Literal, Dict, Any
+from typing import Optional, Type, Literal, Dict, Any, cast
 from types import TracebackType
 
 from service.features.config_manager import ConfigManager
-from service.features.config import BaseConfig
 from service.settings import ServiceSettings
 from service.features.manager import Manager, manager_command
 from service.features.engine import Engine, EngineException
 from service.features.component_loader import ComponentLoader
+from service.features.config_loader import ConfigClassLoader
 
 from library.processor import BaseProcessor
-from detectmatelibrary.common.core import CoreComponent
+from detectmatelibrary.common.core import CoreComponent, CoreConfig
 
 
 class ServiceProcessorAdapter(BaseProcessor):
@@ -121,9 +121,22 @@ class Service(Manager, Engine, ABC):
 
         self.log.debug("%s[%s] created", self.component_type, self.component_id)
 
-    def get_config_schema(self) -> Type[BaseConfig]:
-        """Return the configuration schema for this service."""
-        return BaseConfig
+    def get_config_schema(self) -> Type[CoreConfig]:
+        """Return the configuration schema for this service.
+
+        If component_config_class is specified in settings, load and
+        return it. Otherwise return the default CoreConfig.
+        """
+        if hasattr(self.settings, 'component_config_class') and self.settings.component_config_class:
+            try:
+                self.log.debug(f"Loading config class: {self.settings.component_config_class}")
+                config_class = ConfigClassLoader.load_config_class(self.settings.component_config_class)
+                self.log.debug(f"Successfully loaded config class: {config_class}")
+                return config_class
+            except Exception as e:
+                self.log.error(f"Failed to load config class {self.settings.component_config_class}: {e}")
+                raise
+        return cast(Type[CoreConfig], CoreConfig)  # help mypy
 
     def process(self, raw_message: bytes) -> bytes | None | Any:
         """Process the raw message using the library component or default
