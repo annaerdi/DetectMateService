@@ -1,14 +1,15 @@
 """Integration tests for the Service CLI with DummyDetector.
 
 Tests verify detection via engine socket with ParserSchema input.
+Timeout means no detection occurred (detector returns None/False).
+DummyDetector alternates: False, True, False
 """
 import time
 from pathlib import Path
-from subprocess import Popen, TimeoutExpired
+from subprocess import Popen
 from typing import Generator
 import pytest
 import pynng
-import glob
 import yaml
 import sys
 import os
@@ -127,91 +128,36 @@ def running_detector_service(tmp_path: Path) -> Generator[dict, None, None]:
         cwd=module_path,
     )
 
-    time.sleep(0.5)
-
     service_info = {
         "process": proc,
         "manager_addr": settings["manager_addr"],
         "engine_addr": settings["engine_addr"],
     }
 
-    # Enhanced service readiness check
-    def is_service_ready(addr: str) -> bool:
-        """Check if service is ready for actual work, not just ping."""
-        try:
-            with pynng.Pair0(dial=addr, recv_timeout=1000) as sock:
-                # Send a test message that should get a real response
-                test_msg = test_parser_messages[0]  # Use your actual test message
-                sock.send(test_msg)
-                response = sock.recv()
-                return len(response) > 0
-        except Exception:
-            return False
-
-    # Wait for service to be truly ready
+    # Wait for service to be ready
     max_retries = 10
     for attempt in range(max_retries):
         try:
-            # First check basic ping
-            with pynng.Req0(dial=service_info["manager_addr"], recv_timeout=2000) as sock:
+            with pynng.Req0(dial=service_info["manager_addr"], recv_timeout=1000) as sock:
                 sock.send(b"ping")
                 if sock.recv().decode() == "pong":
-                    # Then check if engine is actually processing messages
-                    if is_service_ready(service_info["engine_addr"]):
-                        break
+                    break
         except Exception:
             if attempt == max_retries - 1:
                 proc.terminate()
                 proc.wait(timeout=5)
                 raise RuntimeError(f"Detector service not ready within {max_retries} attempts")
-        time.sleep(0.5)
+        time.sleep(0.2)
 
     yield service_info
 
-    # Enhanced cleanup process
+    # Cleanup
     try:
-        # 1. Send graceful shutdown
         with pynng.Req0(dial=service_info["manager_addr"], recv_timeout=5000) as sock:
             sock.send(b"stop")
             sock.recv()
     except Exception:
-        pass  # Service might already be dead
-
-    # 2. Terminate process with retries
-    for _ in range(3):
-        try:
-            proc.terminate()
-            proc.wait(timeout=5)
-            break
-        except TimeoutExpired:
-            try:
-                proc.kill()
-                proc.wait(timeout=2)
-                break
-            except TimeoutExpired:
-                continue
-
-    # 3. Force IPC cleanup with retries and error handling
-    import time as time_module
-    for attempt in range(5):
-        try:
-            ipc_files = glob.glob(f"/tmp/test_detector_*_{timestamp}.ipc")
-            for ipc_file in ipc_files:
-                if os.path.exists(ipc_file):
-                    os.unlink(ipc_file)
-            # Verify cleanup
-            remaining_files = glob.glob(f"/tmp/test_detector_*_{timestamp}.ipc")
-            if not remaining_files:
-                break
-        except (OSError, PermissionError):
-            pass
-        time_module.sleep(0.2)
-
-
-# @pytest.fixture(autouse=True)
-# def slow_down_tests():
-#     yield
-#     time.sleep(0.5)
+        pass
 
 
 class TestDetectorServiceViaEngine:
@@ -220,163 +166,165 @@ class TestDetectorServiceViaEngine:
     def test_engine_socket_connection(self, running_detector_service: dict) -> None:
         """Verify we can connect to the engine socket."""
         engine_addr = running_detector_service["engine_addr"]
-        with pynng.Pair0(dial=engine_addr, recv_timeout=3000) as socket:
+        with pynng.Pair0(dial=engine_addr, recv_timeout=1000) as socket:
             assert socket is not None, "Should successfully connect to engine socket"
 
-    def test_single_detection_returns_valid_result(
-        self, running_detector_service: dict, test_parser_messages: list
+    @pytest.mark.parametrize("message_index", [0, 1, 2])
+    def test_individual_messages(
+        self, running_detector_service: dict, test_parser_messages: list, message_index: int
     ) -> None:
-        """Verify a single detection request processes ParserSchema and returns
-        DetectorSchema."""
+        """Parameterized test for individual message types.
 
+        Timeout means no detection occurred (detector returned False).
+        Response means detection occurred (detector returned True).
+        """
         engine_addr = running_detector_service["engine_addr"]
 
-        with pynng.Pair0(dial=engine_addr, recv_timeout=5000) as socket:
-            # Send first parser message
-            socket.send(test_parser_messages[0])
+        with pynng.Pair0(dial=engine_addr, recv_timeout=2000) as socket:
+            socket.send(test_parser_messages[message_index])
 
             try:
                 response = socket.recv()
-                assert len(response) > 0, "Should receive non-empty response"
+                # If we get here, detection occurred
+                assert response is not None
+                assert len(response) > 0
 
-                # Verify it can be deserialized as DetectorSchema
+                # Verify it's a valid DetectorSchema
                 schema_id, detector_schema = deserialize(response)
-
-                assert schema_id == DETECTOR_SCHEMA, "Response should be a DetectorSchema"
-                assert hasattr(detector_schema, "description"), "DetectorSchema should have description"
-                assert hasattr(detector_schema, "score"), "DetectorSchema should have score"
-                assert hasattr(detector_schema, "alertsObtain"), "DetectorSchema should have alertsObtain"
-            except pynng.Timeout:
-                # If detector doesn't respond, at least verify connection was established
-                pytest.skip("Detector service did not respond to message")
-
-    def test_detection_description_present(
-        self, running_detector_service: dict, test_parser_messages: list
-    ) -> None:
-        """Verify detection always includes the expected description."""
-        engine_addr = running_detector_service["engine_addr"]
-        with pynng.Pair0(dial=engine_addr, recv_timeout=10000) as socket:
-            socket.send(test_parser_messages[0])
-            try:
-                response = socket.recv()
-                schema_id, detector_schema = deserialize(response)
+                assert schema_id == DETECTOR_SCHEMA
+                assert detector_schema.score == 1.0
                 assert detector_schema.description == "Dummy detection process"
             except pynng.Timeout:
-                pytest.skip("Detector service did not respond to message")
+                # Timeout means detector returned False/None (no detection)
+                pass
 
-    def test_detection_result_has_valid_score(
+    def test_alternating_detection_pattern(
         self, running_detector_service: dict, test_parser_messages: list
     ) -> None:
-        """Verify detection result has a valid score (0.0 or 1.0)."""
+        """Verify the alternating detection pattern: False, True, False.
+
+        DummyDetector alternates: 1st call = no detection, 2nd = detection, 3rd = no detection.
+        """
         engine_addr = running_detector_service["engine_addr"]
-        with pynng.Pair0(dial=engine_addr, recv_timeout=10000) as socket:
-            socket.send(test_parser_messages[0])
-            time.sleep(0.2)
-            response = socket.recv()
-            schema_id, detector_schema = deserialize(response)
-            assert detector_schema.score in [0.0, 1.0], "Score should be 0.0 or 1.0"
-
-    def test_detection_alert_correlation_with_score(
-        self, running_detector_service: dict, test_parser_messages: list
-    ) -> None:
-        """Verify detection alert presence correlates with score."""
-        engine_addr = running_detector_service["engine_addr"]
-        with pynng.Pair0(dial=engine_addr, recv_timeout=10000) as socket:
-            socket.send(test_parser_messages[0])
-            time.sleep(0.2)
-            response = socket.recv()
-            schema_id, detector_schema = deserialize(response)
-            has_alert = len(detector_schema.alertsObtain) > 0
-
-            if has_alert:
-                assert detector_schema.score == 1.0, "Score should be 1.0 when alert present"
-                assert "type" in detector_schema.alertsObtain, "Alert should have type field"
-                assert "Anomaly detected by DummyDetector" in detector_schema.alertsObtain["type"]
-            else:
-                assert detector_schema.score == 0.0, "Score should be 0.0 when no alert"
-
-    def test_detects_first_parser_schema(
-        self, running_detector_service: dict, test_parser_messages: list
-    ) -> None:
-        """Verify detector processes the first test parser schema."""
-
-        engine_addr = running_detector_service["engine_addr"]
-
-        with pynng.Pair0(dial=engine_addr, recv_timeout=10000) as socket:
-            socket.send(test_parser_messages[0])
-            time.sleep(0.2)
-            try:
-                response = socket.recv()
-                schema_id, detector_schema = deserialize(response)
-
-                assert schema_id == DETECTOR_SCHEMA
-                assert detector_schema.score in [0.0, 1.0]
-            except pynng.Timeout:
-                pytest.skip("Detector service did not respond to message")
-
-    def test_detects_second_parser_schema(
-        self, running_detector_service: dict, test_parser_messages: list
-    ) -> None:
-        """Verify detector processes the second test parser schema."""
-
-        engine_addr = running_detector_service["engine_addr"]
-
-        with pynng.Pair0(dial=engine_addr, recv_timeout=10000) as socket:
-            socket.send(test_parser_messages[1])
-            time.sleep(0.2)
-            try:
-                response = socket.recv()
-                schema_id, detector_schema = deserialize(response)
-
-                assert schema_id == DETECTOR_SCHEMA
-                assert detector_schema.score in [0.0, 1.0]
-            except pynng.Timeout:
-                pytest.skip("Detector service did not respond to message")
-
-    def test_detects_third_parser_schema(
-        self, running_detector_service: dict, test_parser_messages: list
-    ) -> None:
-        """Verify detector processes the third test parser schema."""
-
-        engine_addr = running_detector_service["engine_addr"]
-
-        with pynng.Pair0(dial=engine_addr, recv_timeout=10000) as socket:
-            socket.send(test_parser_messages[2])
-            time.sleep(0.2)
-            try:
-                response = socket.recv()
-                schema_id, detector_schema = deserialize(response)
-
-                assert schema_id == DETECTOR_SCHEMA
-                assert detector_schema.score in [0.0, 1.0]
-            except pynng.Timeout:
-                pytest.skip("Detector service did not respond to message")
-
-    def test_consecutive_message_detection_simplified(
-            self, running_detector_service: dict, test_parser_messages: list
-    ) -> None:
-        """Test consecutive messages with fresh connections."""
-        engine_addr = running_detector_service["engine_addr"]
-        responses_received = []
+        results = []
 
         for i, parser_message in enumerate(test_parser_messages):
-            # Use a fresh connection for each message
-            with pynng.Pair0(dial=engine_addr, recv_timeout=15000) as socket:
-                print(f"DEBUG: Sending message {i + 1}")
+            with pynng.Pair0(dial=engine_addr, recv_timeout=2000) as socket:
                 socket.send(parser_message)
 
                 try:
                     response = socket.recv()
-                    print(f"DEBUG: Received response {i + 1}")
-                except pynng.Timeout as e:
-                    print(f"DEBUG: Timeout on message {i + 1}")
-                    raise e
+                    # Detection occurred
+                    schema_id, detector_schema = deserialize(response)
+                    assert schema_id == DETECTOR_SCHEMA
+                    assert detector_schema.score == 1.0
+                    results.append(True)
+                except pynng.Timeout:
+                    # No detection (timeout)
+                    results.append(False)
 
+        # Verify alternating pattern: False, True, False
+        expected_pattern = [False, True, False]
+        assert results == expected_pattern, f"Expected {expected_pattern}, got {results}"
+
+    def test_detection_result_structure(
+        self, running_detector_service: dict, test_parser_messages: list
+    ) -> None:
+        """Verify detection result has proper structure when detection
+        occurs."""
+        engine_addr = running_detector_service["engine_addr"]
+
+        # First message will NOT trigger detection (pattern: False, True, False)
+        # So send first message to advance counter, then second message for detection
+        with pynng.Pair0(dial=engine_addr, recv_timeout=2000) as socket:
+            socket.send(test_parser_messages[0])
+            try:
+                socket.recv()
+            except pynng.Timeout:
+                pass  # Expected
+
+        # Second message WILL trigger detection
+        with pynng.Pair0(dial=engine_addr, recv_timeout=2000) as socket:
+            socket.send(test_parser_messages[1])
+
+            try:
+                response = socket.recv()
                 schema_id, detector_schema = deserialize(response)
+
+                # Verify structure
                 assert schema_id == DETECTOR_SCHEMA
-                assert detector_schema.score in [0.0, 1.0]
-                responses_received.append(detector_schema)
+                assert detector_schema.description == "Dummy detection process"
+                assert detector_schema.score == 1.0
+                assert "type" in detector_schema.alertsObtain
+                assert "Anomaly detected by DummyDetector" in detector_schema.alertsObtain["type"]
+            except pynng.Timeout:
+                pytest.fail("Second message should have triggered detection")
 
-                time.sleep(0.2)
+    def test_no_detection_returns_timeout(
+        self, running_detector_service: dict, test_parser_messages: list
+    ) -> None:
+        """Verify that no detection results in timeout (no response sent).
 
-        assert len(responses_received) == 3
+        Pattern is False, True, False - so 1st and 3rd calls should timeout.
+        """
+        engine_addr = running_detector_service["engine_addr"]
+        # First call does NOT trigger detection (pattern: False)
+        with pynng.Pair0(dial=engine_addr, recv_timeout=2000) as socket:
+            socket.send(test_parser_messages[0])
+            with pytest.raises(pynng.Timeout):
+                socket.recv()
+                pytest.fail("Expected timeout but received response")
+
+    def test_consecutive_messages_with_mixed_results(
+        self, running_detector_service: dict, test_parser_messages: list
+    ) -> None:
+        """Test consecutive messages tracking both detections and non-
+        detections."""
+        engine_addr = running_detector_service["engine_addr"]
+        detection_count = 0
+        no_detection_count = 0
+
+        for i, parser_message in enumerate(test_parser_messages):
+            with pynng.Pair0(dial=engine_addr, recv_timeout=2000) as socket:
+                socket.send(parser_message)
+
+                try:
+                    response = socket.recv()
+                    if response is not None and len(response) > 0:
+                        schema_id, detector_schema = deserialize(response)
+                        assert schema_id == DETECTOR_SCHEMA
+                        assert detector_schema.score == 1.0
+                        detection_count += 1
+                except pynng.Timeout:
+                    # No detection occurred
+                    no_detection_count += 1
+
+        # All 3 messages should be processed
+        total_processed = detection_count + no_detection_count
+        assert total_processed == 3, f"Expected 3 messages processed, got {total_processed}"
+
+        # With alternating pattern: False, True, False = 1 detection, 2 no-detections
+        assert detection_count == 1, f"Expected 1 detection, got {detection_count}"
+        assert no_detection_count == 2, f"Expected 2 no-detections, got {no_detection_count}"
+
+    def test_detection_score_always_1_when_present(
+        self, running_detector_service: dict, test_parser_messages: list
+    ) -> None:
+        """Verify that when detection occurs, score is always 1.0."""
+        engine_addr = running_detector_service["engine_addr"]
+
+        # Try all messages and collect scores from successful detections
+        scores = []
+        for parser_message in test_parser_messages:
+            with pynng.Pair0(dial=engine_addr, recv_timeout=2000) as socket:
+                socket.send(parser_message)
+                try:
+                    response = socket.recv()
+                    schema_id, detector_schema = deserialize(response)
+                    scores.append(detector_schema.score)
+                except pynng.Timeout:
+                    pass  # No detection, skip
+
+        # All collected scores should be 1.0
+        for score in scores:
+            assert score == 1.0, f"Expected score 1.0, got {score}"
