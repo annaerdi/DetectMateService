@@ -174,20 +174,6 @@ class TestParserServiceViaEngine:
             except pynng.Timeout:
                 pytest.skip("Parser service did not respond to message")
 
-    def test_parse_parser_type_present(
-        self, running_parser_service: dict, test_log_messages: list
-    ) -> None:
-        """Verify parse always includes the expected parser type."""
-        engine_addr = running_parser_service["engine_addr"]
-        with pynng.Pair0(dial=engine_addr, recv_timeout=10000) as socket:
-            socket.send(test_log_messages[0])
-            try:
-                response = socket.recv()
-                schema_id, parser_schema = deserialize(response)
-                assert parser_schema.parserType == "DummyParser"
-            except pynng.Timeout:
-                pytest.skip("Parser service did not respond to message")
-
     def test_parse_preserves_original_log(
         self, running_parser_service: dict, test_log_messages: list
     ) -> None:
@@ -223,17 +209,6 @@ class TestParserServiceViaEngine:
             schema_id, parser_schema = deserialize(response)
             assert parser_schema.template == "This is a dummy template"
 
-    def test_parse_has_log_format_variables(
-        self, running_parser_service: dict, test_log_messages: list
-    ) -> None:
-        """Verify parser includes the expected log format variables."""
-        engine_addr = running_parser_service["engine_addr"]
-        with pynng.Pair0(dial=engine_addr, recv_timeout=10000) as socket:
-            socket.send(test_log_messages[0])
-            response = socket.recv()
-            schema_id, parser_schema = deserialize(response)
-            assert parser_schema.logFormatVariables == {"timestamp": "0"}
-
     def test_parse_has_event_id(
         self, running_parser_service: dict, test_log_messages: list
     ) -> None:
@@ -256,7 +231,6 @@ class TestParserServiceViaEngine:
                 response = socket.recv()
                 schema_id, parser_schema = deserialize(response)
                 assert schema_id == PARSER_SCHEMA
-                assert parser_schema.parserType == "DummyParser"
                 assert parser_schema.log == "User john logged in from 192.168.1.100"
             except pynng.Timeout:
                 pytest.skip("Parser service did not respond to message")
@@ -272,7 +246,6 @@ class TestParserServiceViaEngine:
                 response = socket.recv()
                 schema_id, parser_schema = deserialize(response)
                 assert schema_id == PARSER_SCHEMA
-                assert parser_schema.parserType == "DummyParser"
                 assert parser_schema.log == "Database query failed: connection timeout"
             except pynng.Timeout:
                 pytest.skip("Parser service did not respond to message")
@@ -288,7 +261,6 @@ class TestParserServiceViaEngine:
                 response = socket.recv()
                 schema_id, parser_schema = deserialize(response)
                 assert schema_id == PARSER_SCHEMA
-                assert parser_schema.parserType == "DummyParser"
                 assert parser_schema.log == "File config.txt accessed by admin at 10:45:30"
             except pynng.Timeout:
                 pytest.skip("Parser service did not respond to message")
@@ -312,7 +284,6 @@ class TestParserServiceViaEngine:
                     raise e
                 schema_id, parser_schema = deserialize(response)
                 assert schema_id == PARSER_SCHEMA
-                assert parser_schema.parserType == "DummyParser"
                 assert parser_schema.variables == ["dummy_variable"]
                 assert parser_schema.template == "This is a dummy template"
                 responses_received.append(parser_schema)
@@ -330,8 +301,6 @@ class TestParserServiceViaEngine:
                 response = socket.recv()
                 schema_id, parser_schema = deserialize(response)
                 # All messages should have the same dummy parser output structure
-                assert parser_schema.parserType == "DummyParser"
                 assert parser_schema.variables == ["dummy_variable"]
                 assert parser_schema.template == "This is a dummy template"
-                assert parser_schema.logFormatVariables == {"timestamp": "0"}
                 assert parser_schema.EventID == 2

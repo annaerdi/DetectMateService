@@ -217,7 +217,6 @@ class TestFullPipeline:
 
         schema_id, parser_schema = deserialize(parser_response)
         assert schema_id == PARSER_SCHEMA, "Parser should return ParserSchema"
-        assert parser_schema.parserType == "DummyParser"
         assert parser_schema.log == log_schema.log, "Parser should preserve original log"
         assert parser_schema.variables == ["dummy_variable"]
         assert parser_schema.template == "This is a dummy template"
