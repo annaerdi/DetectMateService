@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 
 dependencies = [
+    "detectmatelibrary @ git+https://github.com/ait-detectmate/DetectMateLibrary.git@lib_integration_v2",  # TODO: change branch
     "pathlib>=1.0.1",
     "pydantic>=2.11.7",
     "pydantic-settings>=2.10.1",
@@ -21,9 +22,6 @@ dev = [
     "prek>=0.2.8",
     "pytest>=8.4.1",
     "pytest-cov>=6.2.1",
-    "detectmatelibrary @ git+https://github.com/ait-detectmate/DetectMateLibrary.git@lib_integration_v2"
-    # TODO: change branch
-    # TODO: should this stay a dev dependency? or move to main dependencies?
 ]
 
 [project.scripts]
