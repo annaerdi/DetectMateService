@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   reader:
     build:
@@ -34,6 +32,7 @@ services:
     volumes:
       - ../demo/config:/app/demo/config
       - ../logs:/app/logs
+      - ../demo/data:/app/demo/data  # template file is here
     depends_on:
       - reader
     environment:
@@ -61,6 +60,28 @@ services:
       - PYTHONUNBUFFERED=1
     networks:
       - detectmate_net
+
+  demo:
+    build:
+      context: ..
+      dockerfile: demo/Dockerfile
+      args:
+        GITHUB_TOKEN: ${GITHUB_TOKEN}
+    container_name: detectmate_demo
+    command: python demo/manual_demo_run_tcp.py
+    volumes:
+      - ../demo:/app/demo
+      - ../demo/data:/app/demo/data
+      - ../logs:/app/logs
+    depends_on:
+      - reader
+      - parser
+      - detector
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - detectmate_net
+    restart: "no"  # don't restart after completion
 
 networks:
   detectmate_net:
