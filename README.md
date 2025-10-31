@@ -42,7 +42,7 @@ uv run pytest --cov=. --cov-report=term-missing
 ```
 
 
-### Usage
+## Usage
 
 To use the `Service` class, you can create a subclass that implements the `process` method. Here's an example:
 
@@ -65,7 +65,7 @@ with service:
             print(f"<<< {reply}")
 ```
 
-#### CLI
+### CLI
 
 You can also run the service using the command line interface (CLI).
 It takes configuration files as arguments:
@@ -101,7 +101,7 @@ detectmate stop --settings tests/config/service_settings.yaml
 ```
 
 
-## Demo pipeline run:
+### Demo pipeline run with Docker
 
 A containerized demonstration of the DetectMate log analysis pipeline. The demo runs three services (reader, parser,
 detector) that process audit logs to detect anomalies, with a test script that feeds log lines through the complete
