@@ -2,7 +2,7 @@ import threading
 import pynng
 import logging
 from abc import ABC
-from typing import Optional
+from typing import Optional, List
 from service.settings import ServiceSettings
 from service.features.engine_socket import (
     EngineSocketFactory,
@@ -29,7 +29,7 @@ class DefaultProcessor(BaseProcessor):
 
 class Engine(ABC):
     """Engine drives a background thread that reads raw messages over PAIR0,
-    calls 'self.process()', and sends outputs back over the same socket.
+    calls 'self.process()', and sends outputs to multiple destinations.
 
     The socket implementation is provided by an EngineSocketFactory.
     Default: NngPairSocketFactory (pynng.Pair0).
@@ -61,9 +61,32 @@ class Engine(ABC):
         self._pair_sock = self._engine_socket_factory.create(addr, self.log)
         self._pair_sock.recv_timeout = self.settings.engine_recv_timeout
 
+        # set up output sockets for multiple destinations
+        self._out_sockets: List[pynng.Socket] = []
+        self._setup_output_sockets()
+
         # autostart if enabled
         if getattr(self.settings, "engine_autostart", True):
             self.start()
+
+    def _setup_output_sockets(self) -> None:
+        """Create and connect output sockets for all destinations in
+        out_addr."""
+        if not self.settings.out_addr:
+            self.log.info("No output addresses configured, processed messages will not be forwarded")
+            return
+
+        for addr in self.settings.out_addr:
+            try:
+                # Use Push socket for one-way output to multiple destinations
+                sock = pynng.Push0()
+                sock.dial(addr)
+                self._out_sockets.append(sock)
+                self.log.info(f"Connected output socket to {addr}")
+            except pynng.NNGException as e:
+                self.log.error(f"Failed to connect output socket to {addr}: {e}")
+                # Continue with other sockets even if one fails
+                continue
 
     def start(self) -> str:
         if not self._running:
@@ -111,14 +134,28 @@ class Engine(ABC):
                 self.log.debug("Engine: Processor returned None, skipping send")
                 continue
 
-            # send phase
+            # send phase - send to all output destinations
+            self._send_to_outputs(out)
+
+    def _send_to_outputs(self, data: bytes) -> None:
+        """Send processed data to all configured output destinations."""
+        if not self._out_sockets:
+            self.log.debug("Engine: No output sockets configured, skipping send")
+            return
+
+        failed_sockets = []
+        for i, sock in enumerate(self._out_sockets):
             try:
-                self.log.debug(f"Engine: Sending {len(out)} bytes back")
-                self._pair_sock.send(out)
-                self.log.debug("Engine: Send completed")
+                self.log.debug(f"Engine: Sending {len(data)} bytes to output socket {i}")
+                sock.send(data)
+                self.log.debug(f"Engine: Send completed to output socket {i}")
             except pynng.NNGException as e:
-                self.log.exception("Engine error during send: %s", e)
+                self.log.error(f"Engine error sending to output socket {i}: {e}")
+                failed_sockets.append(i)
                 continue
+
+        if failed_sockets:
+            self.log.warning(f"Failed to send to output sockets: {failed_sockets}")
 
     def stop(self) -> None | str:
         """Stop the engine loop and clean up resources.
@@ -134,11 +171,21 @@ class Engine(ABC):
             return None
         self._running = False
         self._stop_event.set()
-        # Closing the socket will raise in the recv() and let the thread exit
+
+        # Close input socket
         try:
             self._pair_sock.close()
         except pynng.NNGException as e:
             raise EngineException(f"Failed to close engine socket: {e}") from e
+
+        # Close all output sockets
+        for i, sock in enumerate(self._out_sockets):
+            try:
+                sock.close()
+                self.log.debug(f"Closed output socket {i}")
+            except pynng.NNGException as e:
+                self.log.error(f"Failed to close output socket {i}: {e}")
+
         try:
             self._thread.join(timeout=1.0)
             if self._thread.is_alive():

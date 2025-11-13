@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from uuid import uuid5, NAMESPACE_URL
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 import yaml
 from pydantic import ValidationError, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -36,6 +36,9 @@ class ServiceSettings(BaseSettings):
     engine_addr: str | None = "ipc:///tmp/detectmate.engine.ipc"
     engine_autostart: bool = True
     engine_recv_timeout: int = 100  # milliseconds
+
+    # Output addresses - list of destinations for processed messages
+    out_addr: List[str] = []  # e.g. ["ipc:///tmp/out1.ipc", "tcp://localhost:5555"]
 
     model_config = SettingsConfigDict(
         env_prefix="DETECTMATE_",  # DETECTMATE_LOG_LEVEL etc.
