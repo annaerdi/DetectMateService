@@ -39,7 +39,7 @@ def test_parser_messages() -> list:
             "logFormatVariables": {
                 "username": "john",
                 "ip": "192.168.1.100",
-                "timestamp": "1634567890"
+                "Time": "1634567890"
             },
             "receivedTimestamp": 1634567890,
             "parsedTimestamp": 1634567891,
@@ -56,7 +56,7 @@ def test_parser_messages() -> list:
             "logFormatVariables": {
                 "error": "connection timeout",
                 "severity": "HIGH",
-                "timestamp": "1634567900"
+                "Time": "1634567900"
             },
             "receivedTimestamp": 1634567900,
             "parsedTimestamp": 1634567901,
@@ -73,7 +73,7 @@ def test_parser_messages() -> list:
             "logFormatVariables": {
                 "filename": "config.txt",
                 "user": "admin",
-                "timestamp": "1634567910"
+                "Time": "1634567910"
             },
             "receivedTimestamp": 1634567910,
             "parsedTimestamp": 1634567911,
