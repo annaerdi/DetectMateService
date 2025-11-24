@@ -2,7 +2,7 @@
 import pytest
 import time
 import pynng
-import logging
+from pydantic import ValidationError
 
 from service.settings import ServiceSettings
 from service.features.engine import Engine
@@ -418,11 +418,14 @@ out_addr:
 
         settings = ServiceSettings.from_yaml(yaml_file)
 
-        assert settings.out_addr == [
+        assert [str(a) for a in settings.out_addr] == [
             "ipc:///tmp/out1.ipc",
             "ipc:///tmp/out2.ipc",
             "tcp://localhost:5555",
         ]
+
+        schemes = [a.scheme for a in settings.out_addr]
+        assert schemes == ["ipc", "ipc", "tcp"]
 
     def test_concurrent_message_processing(self, temp_ipc_paths):
         """Test that messages are processed and sent correctly under load."""
@@ -470,62 +473,62 @@ out_addr:
             sender.close()
             receiver.close()
 
-    def test_invalid_output_address_handling(self, temp_ipc_paths, caplog):
-        """Test that invalid output addresses are handled gracefully."""
+    def test_invalid_output_address_validation(self, temp_ipc_paths):
+        """Invalid schemes should fail at settings validation time."""
+        with pytest.raises(ValidationError):
+            ServiceSettings(
+                engine_addr=temp_ipc_paths['engine'],
+                manager_addr=temp_ipc_paths['manager'],
+                out_addr=[
+                    temp_ipc_paths['out1'],  # Valid
+                    "invalid://bad.address",  # Invalid scheme -> rejected
+                    temp_ipc_paths['out2'],  # Won't be reached
+                ],
+                engine_autostart=False,
+                log_level="DEBUG",
+            )
+
+    def test_output_socket_failure_resilience_runtime(self, temp_ipc_paths):
+        """Engine should keep sending to reachable outputs even if another
+        valid output is unreachable."""
         settings = ServiceSettings(
             engine_addr=temp_ipc_paths['engine'],
             manager_addr=temp_ipc_paths['manager'],
             out_addr=[
-                temp_ipc_paths['out1'],  # Valid
-                "invalid://bad.address",  # Invalid
-                temp_ipc_paths['out2'],  # Valid
+                temp_ipc_paths['out1'],  # reachable
+                temp_ipc_paths['out2'],  # valid scheme but no listener -> unreachable
             ],
             engine_autostart=False,
-            log_level="DEBUG",
         )
 
-        # Create receivers for valid addresses
+        # Receiver only for out1
         receiver1 = pynng.Pull0()
         receiver1.listen(temp_ipc_paths['out1'])
-        receiver1.recv_timeout = 1000
-
-        receiver2 = pynng.Pull0()
-        receiver2.listen(temp_ipc_paths['out2'])
-        receiver2.recv_timeout = 1000
+        receiver1.recv_timeout = 2000
 
         processor = SimpleProcessor()
-
-        # Engine creation should succeed despite invalid address
-        with caplog.at_level(logging.ERROR):
-            engine = Engine(settings=settings, processor=processor)
-
-        # Should have logged error for invalid address
-        assert any("Failed to connect output socket" in record.message
-                   for record in caplog.records)
+        engine = Engine(settings=settings, processor=processor)
 
         sender = pynng.Pair0()
         sender.dial(temp_ipc_paths['engine'])
 
         try:
             engine.start()
-            time.sleep(0.1)
+            time.sleep(0.2)
 
-            # Send message
-            sender.send(b"test")
+            sender.send(b"resilience test")
 
-            # Valid receivers should still work
+            # out1 must still receive processed data
             result1 = receiver1.recv()
-            result2 = receiver2.recv()
+            assert result1 == b"PROCESSED: RESILIENCE TEST"
 
-            expected = b"PROCESSED: TEST"
-            assert result1 == expected
-            assert result2 == expected
+            # engine should still be running
+            assert engine._running
 
         finally:
             engine.stop()
             sender.close()
             receiver1.close()
-            receiver2.close()
 
 
 class TestEngineMultiOutputEdgeCases:

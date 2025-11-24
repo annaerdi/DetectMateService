@@ -80,7 +80,7 @@ class Engine(ABC):
             try:
                 # Use Push socket for one-way output to multiple destinations
                 sock = pynng.Push0()
-                sock.dial(addr)
+                sock.dial(str(addr))
                 self._out_sockets.append(sock)
                 self.log.info(f"Connected output socket to {addr}")
             except pynng.NNGException as e:

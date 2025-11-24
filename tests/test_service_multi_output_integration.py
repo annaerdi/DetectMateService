@@ -220,17 +220,17 @@ class TestServiceMultiOutputIntegration:
     def test_yaml_config_loading_with_outputs(self, tmp_path):
         """Test loading service settings from YAML with output addresses."""
         yaml_content = """
-component_name: "yaml-test"
-component_type: "test_service"
-log_dir: "{log_dir}"
-manager_addr: "ipc://{tmp}/manager.ipc"
-engine_addr: "ipc://{tmp}/engine.ipc"
-out_addr:
-  - "ipc://{tmp}/out1.ipc"
-  - "ipc://{tmp}/out2.ipc"
-  - "tcp://localhost:5555"
-engine_autostart: false
-""".format(log_dir=str(tmp_path / "logs"), tmp=str(tmp_path))
+        component_name: "yaml-test"
+        component_type: "test_service"
+        log_dir: "{log_dir}"
+        manager_addr: "ipc://{tmp}/manager.ipc"
+        engine_addr: "ipc://{tmp}/engine.ipc"
+        out_addr:
+          - "ipc://{tmp}/out1.ipc"
+          - "ipc://{tmp}/out2.ipc"
+          - "tcp://localhost:5555"
+        engine_autostart: false
+        """.format(log_dir=str(tmp_path / "logs"), tmp=str(tmp_path))
 
         yaml_file = tmp_path / "settings.yaml"
         yaml_file.write_text(yaml_content)
@@ -239,9 +239,13 @@ engine_autostart: false
 
         assert settings.component_name == "yaml-test"
         assert len(settings.out_addr) == 3
-        assert f"ipc://{tmp_path}/out1.ipc" in settings.out_addr
-        assert f"ipc://{tmp_path}/out2.ipc" in settings.out_addr
-        assert "tcp://localhost:5555" in settings.out_addr
+
+        out_strs = [str(a) for a in settings.out_addr]
+        assert f"ipc://{tmp_path}/out1.ipc" in out_strs
+        assert f"ipc://{tmp_path}/out2.ipc" in out_strs
+        assert "tcp://localhost:5555" in out_strs
+
+        assert [a.scheme for a in settings.out_addr] == ["ipc", "ipc", "tcp"]
 
     def test_concurrent_services_different_outputs(self, tmp_path):
         """Test multiple services with different output destinations."""

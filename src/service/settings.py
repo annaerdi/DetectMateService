@@ -1,10 +1,21 @@
 import os
 from pathlib import Path
 from uuid import uuid5, NAMESPACE_URL
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Optional, List, Annotated, Union
 import yaml
-from pydantic import ValidationError, model_validator
+from pydantic import ValidationError, model_validator, UrlConstraints, field_serializer, Field
+from pydantic_core import Url
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+# Output address URL types
+TcpUrl = Annotated[Url, UrlConstraints(allowed_schemes=["tcp"], host_required=True)]
+TlsTcpUrl = Annotated[Url, UrlConstraints(allowed_schemes=["tls+tcp"], host_required=True)]
+WsUrl = Annotated[Url, UrlConstraints(allowed_schemes=["ws"], host_required=True),]
+IpcUrl = Annotated[Url, UrlConstraints(allowed_schemes=["ipc"], host_required=False)]
+InprocUrl = Annotated[Url, UrlConstraints(allowed_schemes=["inproc"], host_required=False)]
+
+OutAddr = Union[TcpUrl, IpcUrl, InprocUrl, WsUrl, TlsTcpUrl]
 
 
 class ServiceSettings(BaseSettings):
@@ -37,8 +48,8 @@ class ServiceSettings(BaseSettings):
     engine_autostart: bool = True
     engine_recv_timeout: int = 100  # milliseconds
 
-    # Output addresses - list of destinations for processed messages
-    out_addr: List[str] = []  # e.g. ["ipc:///tmp/out1.ipc", "tcp://localhost:5555"]
+    # Output addresses (strongly typed URLs)
+    out_addr: List[OutAddr] = Field(default_factory=list)
 
     model_config = SettingsConfigDict(
         env_prefix="DETECTMATE_",  # DETECTMATE_LOG_LEVEL etc.
@@ -47,6 +58,11 @@ class ServiceSettings(BaseSettings):
     )
 
     config_file: Optional[Path] = None
+
+    # serializer so dumps/json/status become strings again
+    @field_serializer("out_addr")
+    def _ser_out_addr(self, v: List[OutAddr]) -> List[str]:
+        return [str(x) for x in v]
 
     @staticmethod
     def _generate_uuid_from_string(input_string: str) -> str:
