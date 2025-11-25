@@ -15,7 +15,7 @@ WsUrl = Annotated[Url, UrlConstraints(allowed_schemes=["ws"], host_required=True
 IpcUrl = Annotated[Url, UrlConstraints(allowed_schemes=["ipc"], host_required=False)]
 InprocUrl = Annotated[Url, UrlConstraints(allowed_schemes=["inproc"], host_required=False)]
 
-OutAddr = Union[TcpUrl, IpcUrl, InprocUrl, WsUrl, TlsTcpUrl]
+NngAddr = Union[TcpUrl, IpcUrl, InprocUrl, WsUrl, TlsTcpUrl]
 
 
 class ServiceSettings(BaseSettings):
@@ -49,7 +49,7 @@ class ServiceSettings(BaseSettings):
     engine_recv_timeout: int = 100  # milliseconds
 
     # Output addresses (strongly typed URLs)
-    out_addr: List[OutAddr] = Field(default_factory=list)
+    out_addr: List[NngAddr] = Field(default_factory=list)
     # timeout for output dials. Used with blocking dial in Engine
     out_dial_timeout: int = 1000  # milliseconds
 
@@ -63,7 +63,7 @@ class ServiceSettings(BaseSettings):
 
     # serializer so dumps/json/status become strings again
     @field_serializer("out_addr")
-    def _ser_out_addr(self, v: List[OutAddr]) -> List[str]:
+    def _ser_out_addr(self, v: List[NngAddr]) -> List[str]:
         return [str(x) for x in v]
 
     @staticmethod
