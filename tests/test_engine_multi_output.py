@@ -551,42 +551,30 @@ out_addr:
             receiver1.close()
             receiver2.close()
 
-    def test_unreachable_output_address_hard_fail(self, temp_ipc_paths):
-        """Engine should hard-fail if any configured output is unreachable at
-        startup."""
+    def test_unreachable_output_does_not_fail_startup(self, temp_ipc_paths):
+        """Engine should start even if output is unreachable at startup."""
         settings = ServiceSettings(
             engine_addr=temp_ipc_paths['engine'],
             manager_addr=temp_ipc_paths['manager'],
             out_addr=[
-                temp_ipc_paths['out1'],  # reachable
-                temp_ipc_paths['out2'],  # NO listener -> unreachable
+                temp_ipc_paths['out1'],  # acts as unreachable (no listener)
             ],
             engine_autostart=False,
         )
 
-        # Listener only on out1 so out2 is unreachable at startup
-        receiver1 = pynng.Pull0()
-        receiver1.listen(temp_ipc_paths['out1'])
-        receiver1.recv_timeout = 1000
+        processor = SimpleProcessor()
+        # Should not raise EngineException
+        engine = Engine(settings=settings, processor=processor)
+        engine.start()
+        engine.stop()
 
-        try:
-            with pytest.raises(EngineException) as excinfo:
-                Engine(settings=settings, processor=SimpleProcessor())
-
-            msg = str(excinfo.value)
-            assert "Failed to connect to all output addresses at startup" in msg
-            assert temp_ipc_paths['out2'] in msg
-        finally:
-            receiver1.close()
-
-    def test_output_socket_unavailable_hard_fails_even_if_one_reachable(self, temp_ipc_paths):
-        """Same as above but verifies failure happens before start() as
-        well."""
+    def test_output_socket_unavailable_does_not_fail_startup(self, temp_ipc_paths):
+        """Engine starts if one reachable and one unreachable output exist."""
         settings = ServiceSettings(
             engine_addr=temp_ipc_paths['engine'],
             manager_addr=temp_ipc_paths['manager'],
             out_addr=[
-                temp_ipc_paths['out1'],
+                temp_ipc_paths['out1'],  # available
                 temp_ipc_paths['out2'],  # unreachable
             ],
             engine_autostart=False,
@@ -597,10 +585,60 @@ out_addr:
         receiver1.recv_timeout = 1000
 
         try:
-            with pytest.raises(EngineException):
-                Engine(settings=settings, processor=SimpleProcessor())
+            # Should not raise exception
+            engine = Engine(settings=settings, processor=SimpleProcessor())
+            engine.start()
+            assert engine._running
+            engine.stop()
         finally:
             receiver1.close()
+
+    def test_late_binding_output(self, temp_ipc_paths):
+        """Test that engine connects to an output that comes online AFTER engine start."""
+        settings = ServiceSettings(
+            engine_addr=temp_ipc_paths['engine'],
+            manager_addr=temp_ipc_paths['manager'],
+            out_addr=[temp_ipc_paths['out1']],
+            engine_autostart=False,
+        )
+
+        # Start engine first (output is offline)
+        processor = SimpleProcessor()
+        engine = Engine(settings=settings, processor=processor)
+        engine.start()
+
+        sender = pynng.Pair0()
+        sender.dial(temp_ipc_paths['engine'])
+
+        try:
+            # Send a message while output is down
+            # It should be dropped (or queued depending on internal buffers, but we expect drop/no-block)
+            sender.send(b"msg1")
+            time.sleep(0.1)
+
+            # Now bring up the output
+            receiver = pynng.Pull0()
+            receiver.listen(temp_ipc_paths['out1'])
+            receiver.recv_timeout = 2000
+
+            # Give it a moment to connect in background
+            time.sleep(0.2)
+
+            # Send another message
+            sender.send(b"msg2")
+
+            # Receiver should get msg2.
+            # msg1 might be lost or received depending on NNG PUSH buffering.
+            # We strictly care that msg2 IS received, proving connection was established.
+            result = receiver.recv()
+            assert result == b"PROCESSED: MSG2"
+
+        finally:
+            engine.stop()
+            sender.close()
+            # receiver might not be defined if it failed earlier, check locals
+            if 'receiver' in locals():
+                receiver.close()
 
 
 class TestEngineMultiOutputEdgeCases:

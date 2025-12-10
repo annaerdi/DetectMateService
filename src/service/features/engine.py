@@ -80,13 +80,12 @@ class Engine(ABC):
     def _setup_output_sockets(self) -> None:
         """Create and connect output sockets for all destinations in out_addr.
 
-        Hard-fail if any destination is unavailable at startup.
+        Attempts to connect to all configured addresses. If a destination is
+        unavailable, the socket remains in a dialing state (background retry).
         """
         if not self.settings.out_addr:
             self.log.info("No output addresses configured, processed messages will not be forwarded")
             return
-
-        failures: list[tuple[str, Exception]] = []
 
         for addr in self.settings.out_addr:
             addr_str = str(addr)
@@ -95,31 +94,14 @@ class Engine(ABC):
                 sock = pynng.Push0()
                 # Ensure blocking dial honors timeout
                 sock.dial_timeout = self.settings.out_dial_timeout
-                # Block until connect or timeout -> detect missing listeners now
-                sock.dial(addr_str, block=True)
+                # Non-blocking dial: returns immediately, connects in background
+                sock.dial(addr_str, block=False)
                 self._out_sockets.append(sock)
-                self.log.info(f"Connected output socket to {addr_str}")
-            except (pynng.Timeout, pynng.NNGException) as e:
-                self.log.error(f"Failed to connect output socket to {addr_str}: {e}")
-                failures.append((addr_str, e))
+                self.log.info(f"Initialized output socket for {addr_str} (background connect)")
             except Exception as e:
-                self.log.exception(f"Unexpected error connecting output socket to {addr_str}: {e}")
-                failures.append((addr_str, e))
-
-        if failures:
-            # Close any sockets that did connect
-            for i, sock in enumerate(self._out_sockets):
-                try:
-                    sock.close()
-                    self.log.debug("Closed output socket %d after setup failure", i)
-                except pynng.NNGException as e:
-                    self.log.warning("Failed to close output socket %d after setup failure: %s", i, e)
-            self._out_sockets.clear()
-            msg = "; ".join(f"{a} -> {type(e).__name__}: {e}" for a, e in failures)
-            raise EngineException(
-                "Failed to connect to all output addresses at startup. "
-                f"Unreachable: {msg}"
-            )
+                # This catches invalid URLs or other immediate setup errors
+                self.log.error(f"Failed to initialize output socket for {addr_str}: {e}")
+                # We attempt to continue with other sockets rather than crashing entirely
 
     def start(self) -> str:
         if not self._running:
@@ -190,19 +172,22 @@ class Engine(ABC):
             self.log.debug("Engine: No output sockets configured, skipping send")
             return
 
-        failed_sockets = []
         for i, sock in enumerate(self._out_sockets):
             try:
                 self.log.debug(f"Engine: Sending {len(data)} bytes to output socket {i}")
-                sock.send(data)
+                # Non-blocking send or short timeout is preferred to avoid stalling
+                # pynng doesn't easily support per-send timeout without setting it on socket.
+                # sock.send_timeout could be set, but block=False is explicit.
+                # However, Push0 in NNG with block=False will raise TryAgain if no peer is connected/ready.
+                sock.send(data, block=False)
                 self.log.debug(f"Engine: Send completed to output socket {i}")
+            except pynng.TryAgain:
+                # Determine intended behavior: drop message or block?
+                # For high-throughput services, dropping is usually preferred over stalling.
+                self.log.warning(f"Engine: Output socket {i} not ready (full/disconnected), dropping message")
             except pynng.NNGException as e:
                 self.log.error(f"Engine error sending to output socket {i}: {e}")
-                failed_sockets.append(i)
                 continue
-
-        if failed_sockets:
-            self.log.warning(f"Failed to send to output sockets: {failed_sockets}")
 
     def stop(self) -> None | str:
         """Stop the engine loop and clean up resources.
