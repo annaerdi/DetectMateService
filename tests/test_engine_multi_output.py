@@ -66,7 +66,7 @@ class TestEngineMultiOutput:
         )
 
         # Create output receiver
-        receiver = pynng.Pull0()
+        receiver = pynng.Pair0()
         receiver.listen(temp_ipc_paths['out1'])
         receiver.recv_timeout = 1000
 
@@ -112,7 +112,7 @@ class TestEngineMultiOutput:
         # Create multiple output receivers
         receivers = []
         for addr in [temp_ipc_paths['out1'], temp_ipc_paths['out2'], temp_ipc_paths['out3']]:
-            receiver = pynng.Pull0()
+            receiver = pynng.Pair0()
             receiver.listen(addr)
             receiver.recv_timeout = 1000
             receivers.append(receiver)
@@ -197,12 +197,12 @@ class TestEngineMultiOutput:
         )
 
         # Create IPC receiver
-        ipc_receiver = pynng.Pull0()
+        ipc_receiver = pynng.Pair0()
         ipc_receiver.listen(temp_ipc_paths['out1'])
         ipc_receiver.recv_timeout = 1000
 
         # Create TCP receiver
-        tcp_receiver = pynng.Pull0()
+        tcp_receiver = pynng.Pair0()
         tcp_receiver.listen('tcp://127.0.0.1:15555')
         tcp_receiver.recv_timeout = 1000
 
@@ -243,7 +243,7 @@ class TestEngineMultiOutput:
             engine_autostart=False,
         )
 
-        receiver = pynng.Pull0()
+        receiver = pynng.Pair0()
         receiver.listen(temp_ipc_paths['out1'])
         receiver.recv_timeout = 500  # Short timeout
 
@@ -283,11 +283,11 @@ class TestEngineMultiOutput:
         )
 
         # Receivers for both outputs so startup succeeds
-        receiver1 = pynng.Pull0()
+        receiver1 = pynng.Pair0()
         receiver1.listen(temp_ipc_paths['out1'])
         receiver1.recv_timeout = 2000
 
-        receiver2 = pynng.Pull0()
+        receiver2 = pynng.Pair0()
         receiver2.listen(temp_ipc_paths['out2'])
         receiver2.recv_timeout = 2000
 
@@ -335,7 +335,7 @@ class TestEngineMultiOutput:
 
         receivers = []
         for addr in [temp_ipc_paths['out1'], temp_ipc_paths['out2']]:
-            receiver = pynng.Pull0()
+            receiver = pynng.Pair0()
             receiver.listen(addr)
             receiver.recv_timeout = 1000
             receivers.append(receiver)
@@ -348,12 +348,13 @@ class TestEngineMultiOutput:
 
         try:
             engine.start()
-            time.sleep(0.1)
+            time.sleep(0.5)
 
             # Send multiple messages
             messages = [b"msg1", b"msg2", b"msg3"]
             for msg in messages:
                 sender.send(msg)
+                time.sleep(0.05)
 
             # Collect results from all receivers
             for receiver in receivers:
@@ -380,7 +381,7 @@ class TestEngineMultiOutput:
         # Create receivers
         receivers = []
         for addr in [temp_ipc_paths['out1'], temp_ipc_paths['out2']]:
-            receiver = pynng.Pull0()
+            receiver = pynng.Pair0()
             receiver.listen(addr)
             receivers.append(receiver)
 
@@ -446,7 +447,7 @@ out_addr:
             engine_autostart=False,
         )
 
-        receiver = pynng.Pull0()
+        receiver = pynng.Pair0()
         receiver.listen(temp_ipc_paths['out1'])
         receiver.recv_timeout = 2000
 
@@ -512,11 +513,11 @@ out_addr:
         )
 
         # Receivers for both outputs so startup succeeds
-        receiver1 = pynng.Pull0()
+        receiver1 = pynng.Pair0()
         receiver1.listen(temp_ipc_paths['out1'])
         receiver1.recv_timeout = 2000
 
-        receiver2 = pynng.Pull0()
+        receiver2 = pynng.Pair0()
         receiver2.listen(temp_ipc_paths['out2'])
         receiver2.recv_timeout = 2000
 
@@ -580,7 +581,7 @@ out_addr:
             engine_autostart=False,
         )
 
-        receiver1 = pynng.Pull0()
+        receiver1 = pynng.Pair0()
         receiver1.listen(temp_ipc_paths['out1'])
         receiver1.recv_timeout = 1000
 
@@ -617,12 +618,12 @@ out_addr:
             time.sleep(0.1)
 
             # Now bring up the output
-            receiver = pynng.Pull0()
+            receiver = pynng.Pair0()
             receiver.listen(temp_ipc_paths['out1'])
             receiver.recv_timeout = 2000
 
             # Give it a moment to connect in background
-            time.sleep(0.2)
+            time.sleep(1.0)
 
             # Send another message
             sender.send(b"msg2")
@@ -653,7 +654,7 @@ class TestEngineMultiOutputEdgeCases:
             engine_autostart=False,
         )
 
-        receiver = pynng.Pull0()
+        receiver = pynng.Pair0()
         receiver.listen(temp_ipc_paths['out1'])
         receiver.recv_timeout = 500
 
@@ -691,7 +692,7 @@ class TestEngineMultiOutputEdgeCases:
 
         receivers = []
         for addr in [temp_ipc_paths['out1'], temp_ipc_paths['out2']]:
-            receiver = pynng.Pull0()
+            receiver = pynng.Pair0()
             receiver.listen(addr)
             receiver.recv_timeout = 2000
             receivers.append(receiver)
