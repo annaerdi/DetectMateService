@@ -1,6 +1,6 @@
 import pynng
 import sys
-import time
+
 
 def send_message(msg):
     address = "ipc:///tmp/sender.engine.ipc"
@@ -14,9 +14,6 @@ def send_message(msg):
 
         print(f"Client: Sending '{msg}'...")
         sock.send(msg.encode())
-        # Wait a bit for potential reply if any, though in this architecture 
-        # the engine might not reply on PAIR if it forwards. 
-        # But let's see if we get anything back or just exit.
         print("Client: Sent.")
 
 if __name__ == "__main__":
