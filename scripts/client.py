@@ -20,5 +20,5 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         message = sys.argv[1]
     else:
-        message = "Hello from manual client"
+        message = "Hello from manual 123"
     send_message(message)

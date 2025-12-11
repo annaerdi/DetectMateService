@@ -628,11 +628,12 @@ out_addr:
             # Send another message
             sender.send(b"msg2")
 
-            # Receiver should get msg2.
-            # msg1 might be lost or received depending on NNG PUSH buffering.
-            # We strictly care that msg2 IS received, proving connection was established.
-            result = receiver.recv()
-            assert result == b"PROCESSED: MSG2"
+            # Receiver should get msg1 first (it was blocked/stalled), then msg2.
+            result1 = receiver.recv()
+            assert result1 == b"PROCESSED: MSG1"
+            
+            result2 = receiver.recv()
+            assert result2 == b"PROCESSED: MSG2"
 
         finally:
             engine.stop()

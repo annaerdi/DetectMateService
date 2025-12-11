@@ -92,6 +92,8 @@ class Engine(ABC):
             try:
                 # Use Pair socket to match the input socket type of other services
                 sock = pynng.Pair0()
+                # Set buffer to maximum allowed (8192 messages) to allow temporary stalling without blocking engine
+                sock.send_buffer_size = 8192
                 # Ensure blocking dial honors timeout
                 sock.dial_timeout = self.settings.out_dial_timeout
                 # Non-blocking dial: returns immediately, connects in background
@@ -175,16 +177,9 @@ class Engine(ABC):
         for i, sock in enumerate(self._out_sockets):
             try:
                 self.log.debug(f"Engine: Sending {len(data)} bytes to output socket {i}")
-                # Non-blocking send or short timeout is preferred to avoid stalling
-                # pynng doesn't easily support per-send timeout without setting it on socket.
-                # sock.send_timeout could be set, but block=False is explicit.
-                # However, Push0 in NNG with block=False will raise TryAgain if no peer is connected/ready.
-                sock.send(data, block=False)
+                # Blocking send will wait until the socket is ready (connected/writable)
+                sock.send(data)
                 self.log.debug(f"Engine: Send completed to output socket {i}")
-            except pynng.TryAgain:
-                # Determine intended behavior: drop message or block?
-                # For high-throughput services, dropping is usually preferred over stalling.
-                self.log.warning(f"Engine: Output socket {i} not ready (full/disconnected), dropping message")
             except pynng.NNGException as e:
                 self.log.error(f"Engine error sending to output socket {i}: {e}")
                 continue
