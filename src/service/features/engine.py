@@ -80,8 +80,9 @@ class Engine(ABC):
     def _setup_output_sockets(self) -> None:
         """Create and connect output sockets for all destinations in out_addr.
 
-        Attempts to connect to all configured addresses. If a destination is
-        unavailable, the socket remains in a dialing state (background retry).
+        Attempts to connect to all configured addresses. If a
+        destination is unavailable, the socket remains in a dialing
+        state (background retry).
         """
         if not self.settings.out_addr:
             self.log.info("No output addresses configured, processed messages will not be forwarded")
@@ -92,8 +93,9 @@ class Engine(ABC):
             try:
                 # Use Pair socket to match the input socket type of other services
                 sock = pynng.Pair0()
-                # Set buffer to maximum allowed (8192 messages) to allow temporary stalling without blocking engine
-                sock.send_buffer_size = 8192
+                # Set buffer to configured size (default max 8192) to allow temporary
+                # stalling without blocking engine
+                sock.send_buffer_size = self.settings.out_buffer_size
                 # Ensure blocking dial honors timeout
                 sock.dial_timeout = self.settings.out_dial_timeout
                 # Non-blocking dial: returns immediately, connects in background

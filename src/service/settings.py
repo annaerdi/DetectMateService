@@ -52,6 +52,8 @@ class ServiceSettings(BaseSettings):
     out_addr: List[NngAddr] = Field(default_factory=list)
     # timeout for output dials. Used with blocking dial in Engine
     out_dial_timeout: int = 1000  # milliseconds
+    # Socket send buffer size (max 8192)
+    out_buffer_size: int = 8192
 
     model_config = SettingsConfigDict(
         env_prefix="DETECTMATE_",  # DETECTMATE_LOG_LEVEL etc.
