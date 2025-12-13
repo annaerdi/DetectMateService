@@ -3,36 +3,21 @@
 Welcome to the DetectMate Service Framework documentation. DetectMate is a flexible, component-based framework for
 building distributed detection and processing services.
 
-## Overview
-
-DetectMate provides a foundation for creating services that:
-
-- **Process data in real-time** using a high-performance messaging architecture
-- **Support dynamic reconfiguration** without service restarts
-- **Enable modular component design** through a plugin-based system
-- **Provide command and control** via a simple REQ/REP interface
-- **Scale horizontally** with independent service instances
+DetectMate Service is a framework for building distributed processing services. It uses NNG's messaging architecture to process data in real-time.
 
 ## Key Features
 
-- **Dual-Channel Architecture**: Separate channels for management commands (REQ/REP) and data processing (PAIR)
-- **Hot Reconfiguration**: Update service parameters at runtime with optional persistence
-- **Component Loader**: Dynamically load processing components from the DetectMate library
-- **Type-Safe Configuration**: Pydantic-based settings and configuration validation
-- **Flexible Deployment**: Support for IPC and TCP socket protocols
-- **Comprehensive Logging**: Built-in logging to console and file with configurable levels
-
-## Documentation Structure
+- **Real-time Processing**: Fast data handling using ZeroMQ/NNG.
+- **Dynamic Reconfiguration**: Update settings without restarting.
+- **Modular**: Load components dynamically.
+- **Scalable**: Run multiple independent service instances.
 
 ### User Guide
 
-- [Quick Start](user-guide/quick-start.md)
-- [Installation](user-guide/installation.md)
-- [Configuration](user-guide/configuration.md)
-
-### Developer Guide
-
-TBA
+- [Quick Start](quick-start.md)
+- [Installation](installation.md)
+- [Usage Guide](usage.md): CLI reference
+- [Configuration](configuration.md): settings and environment variables
 
 ## Quick Example
 
