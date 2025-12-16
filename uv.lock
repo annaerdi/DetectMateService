@@ -129,7 +129,7 @@ wheels = [
 [[package]]
 name = "detectmatelibrary"
 version = "0.1.0"
-source = { git = "https://github.com/ait-detectmate/DetectMateLibrary.git?rev=main#115d08409ccbf580d9b82128cb58d4dd9d467fa6" }
+source = { git = "https://github.com/ait-detectmate/DetectMateLibrary.git#115d08409ccbf580d9b82128cb58d4dd9d467fa6" }
 dependencies = [
     { name = "drain3" },
     { name = "pandas" },
@@ -163,6 +163,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "detectmatelibrary", git = "https://github.com/ait-detectmate/DetectMateLibrary.git?rev=main" },
+    { name = "detectmatelibrary", git = "https://github.com/ait-detectmate/DetectMateLibrary.git" },
     { name = "pathlib", specifier = ">=1.0.1" },
     { name = "prek", marker = "extra == 'dev'", specifier = ">=0.2.8" },
     { name = "pydantic", specifier = ">=2.11.7" },
