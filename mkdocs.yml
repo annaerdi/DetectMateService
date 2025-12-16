@@ -3,3 +3,12 @@ site_url: https://annaerdi.github.io/DetectMateService/
 
 theme:
   name: readthedocs
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: installation.md
+    - Configuration: configuration.md
+    - Usage:
+      - Quick Start: usage.md
+      - Using a Library Component: library.md

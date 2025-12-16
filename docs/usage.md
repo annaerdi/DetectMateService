@@ -1,28 +1,92 @@
 # Usage
 
-## Parameter Management
+DetectMateService provides a command-line interface (CLI) `detectmate` to manage the service.
 
-The service supports dynamic parameter reconfiguration with two modes:
+## Quick start your first Service
 
-### 1. In-Memory Update (default)
-Changes are applied to the running service but not saved to disk. The changes will be lost when the service restarts.
-
+To run a component with default settings only, you can use this command:
 ```bash
-detectmate reconfigure --settings service_config.yaml --params new_params.yaml
+detectmate start
 ```
 
-### 2. Persistent Update (with --persist flag)
-Changes are applied to the running service AND saved to the original parameter file. The changes persist across service restarts.
+You should see output like:
 
-```bash
-detectmate reconfigure --settings service_config.yaml --params new_params.yaml --persist
+```
+[2025-10-21 10:30:00] INFO core.abc123: Manager listening on ipc:///tmp/detectmate.cmd.ipc
+[2025-10-21 10:30:00] INFO core.abc123: engine started
+[2025-10-21 10:30:00] INFO core.abc123: setup_io: ready to process messages
 ```
 
-**Note:** The `--persist` flag will overwrite the original parameter file specified in your service configuration with the new values from the `--params` file.
+## Create service settings
 
-## Example Parameter File
+To run the service with custom variables, we can define settings. For example, create a file named `settings.yaml`:
+
 ```yaml
-threshold: 0.7
-window_size: 15
-enabled: true
+component_name: my-first-service
+component_type: core  # or use a library component like "detectors.RandomDetector"
+log_level: INFO
+log_dir: ./logs
+manager_addr: ipc:///tmp/detectmate.cmd.ipc
+engine_addr: ipc:///tmp/detectmate.engine.ipc
+```
+
+## Start the service with settings
+
+To start the service, use the `start` command. You can optionally specify a settings file and a component configuration file.
+
+```bash
+detectmate start --settings settings.yaml --config config.yaml
+```
+
+- `--settings`: Path to the service settings YAML file.
+- `--config`: Path to the component configuration YAML file.
+
+## Checking status
+
+To check the status of a running service run:
+
+```bash
+detectmate status --settings settings.yaml
+```
+
+The `--settings` argument is required to know where to contact the service manager (via `manager_addr`).
+
+Output:
+
+```json
+{
+  "status": {
+    "component_type": "core",
+    "component_id": "abc123...",
+    "running": true
+  },
+  "settings": {
+    "component_name": "my-first-service",
+    "log_level": "INFO",
+    ...
+  },
+  "configs": {}
+}
+```
+
+## Reconfiguring
+
+You can update the component configuration of a running service without restarting it:
+
+```bash
+detectmate reconfigure --settings settings.yaml --config new_config.yaml
+```
+
+Add `--persist` to save the new configuration to the original config file (if supported).
+
+```bash
+detectmate reconfigure --settings settings.yaml --config new_config.yaml --persist
+```
+
+## Stopping the service
+
+To stop the service:
+
+```bash
+detectmate stop --settings settings.yaml
 ```
